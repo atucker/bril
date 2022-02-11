@@ -226,16 +226,12 @@ def do_lvn():
             if 'op' in instr and instr['op'] not in {'jmp', 'br'}:
                 old_instr = instr
                 old_value = var_table.make_value(instr)
-
-                # If we simplified the value into a constant, replace the instr
-                if old_value[0] == 'const' and instr['op'] != 'const':
-                    instr = const_instr(instr['dest'], old_value)
-                    debug_msg(f"Replaced {old_instr} w/ constant {instr} when got value")
-                    old_instr = old_instr
-                debug_msg(f"Converted instruction {instr} to value {old_value}")
-
                 value = var_table.unroll_ids(old_value)
                 debug_msg(f"Unrolled id lookups for {old_value} -> {value}")
+                # If we simplified the value into a constant, put it in the
+                # table so that the simplification step can find it
+                if old_value[0] == 'const' and instr['op'] != 'const':
+                    var_table.insert_var(instr['dest'], value)
 
                 if 'dest' in instr:
                     dest = instr['dest']
