@@ -1,8 +1,9 @@
+# CMD: bril2json < {filename} | python3 ../../lvn.py | bril2txt   
 # ARGS: -f
 
 @main(arg1: bool, arg2: bool) {
-  t: int = const true;
-  f: int = const false;
+  t: bool = const true;
+  f: bool = const false;
 
   constant_fold1: bool = and f t;
   constant_fold2: bool = and t f;
