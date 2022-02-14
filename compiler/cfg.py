@@ -1,5 +1,6 @@
 import json
 import sys
+from collections import OrderedDict
 
 TERMINATORS = {'jmp', 'br', 'ret'}
 
@@ -21,20 +22,21 @@ def make_blocks(body):
 
 
 def name_blocks(blocks):
-    named_blocks = []
+    named_blocks = OrderedDict()
     for block in blocks:
-        name = f"b{len(named_blocks)+1}"
+        name = f"b{len(named_blocks)}"
         if 'label' in block[0]:
             name = block[0]['label']
-        named_blocks.append((name, block))
+        named_blocks[name] = block
     return named_blocks
 
 
 def make_cfg(prog):
-    cfg = {}
+    cfg = OrderedDict()
+    named_blocks = None
     for func in prog['functions']:
         named_blocks = name_blocks(make_blocks(func['instrs']))
-        for i, (name, block) in enumerate(named_blocks):
+        for i, (name, block) in enumerate(named_blocks.items()):
             if 'op' in block[-1] and block[-1]['op'] in {'jmp', 'br'}:
                 cfg[name] = block[-1]['labels']
             elif 'op' in block[-1] and block[-1]['op'] == 'ret':
@@ -44,8 +46,8 @@ def make_cfg(prog):
                     cfg[name] = [named_blocks[i+1][0]]
                 else:
                     cfg[name] = []
-    return cfg
+    return named_blocks, cfg
 
 
 if __name__ == "__main__":
-    print(make_cfg(json.load(sys.stdin)))
+    print(make_cfg(json.load(sys.stdin))[1])
