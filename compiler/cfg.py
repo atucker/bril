@@ -23,8 +23,7 @@ def make_blocks(body):
 def name_blocks(blocks):
     named_blocks = []
     for block in blocks:
-        name = f"b{len(named_blocks)}"
-        print(block)
+        name = f"b{len(named_blocks)+1}"
         if 'label' in block[0]:
             name = block[0]['label']
         named_blocks.append((name, block))
