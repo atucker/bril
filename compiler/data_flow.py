@@ -57,7 +57,7 @@ def stringify_var_version_set(var_varsion_set):
     for var, versions in var_varsion_set.items():
         assert len(versions) > 0
         for ver in versions:
-            ans += f"{var}_{ver}, "
+            ans += f"{var}/{ver}, "
     return ans[:-2]
 
 
