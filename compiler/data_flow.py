@@ -67,11 +67,24 @@ def do_reachability():
     predecessors = get_predecessors(successors)
 
     in_reachable = {}
-    out_reachable = {}
     # Do this manually instead of using a defaultdict so that the program
     # crashes if I try to access something that isn't there...
     for name in blocks.keys():
+        in_reachable[name] = {}
+    out_reachable = {}
+
+    # Go through and grab the args for each function...
+    for name in blocks.keys():
         out_reachable[name] = {}
+    for func in prog['functions']:
+        key = f"{func['name']}.entry"
+        if len(prog['functions']) == 1:
+            key = 'entry'
+
+        in_reachable[key] = OrderedDict()
+        if 'args' in func:
+            for arg in func['args']:
+                in_reachable[key][arg['name']] = {f'{key}.arg'}
 
     worklist = [*blocks.items()]
     for name, instrs in worklist:
@@ -80,7 +93,7 @@ def do_reachability():
 
         # Compute our input
         inpt = reduce(
-            join_vars, [out_reachable[p] for p in predecessors[name]], dict()
+            join_vars, [out_reachable[p] for p in predecessors[name]], in_reachable[name]
         )
 
         # Compute our output
