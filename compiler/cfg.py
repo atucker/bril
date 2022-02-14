@@ -31,8 +31,7 @@ def name_blocks(blocks):
     return named_blocks
 
 
-def make_cfg():
-    prog = json.load(sys.stdin)
+def make_cfg(prog):
     cfg = {}
     for func in prog['functions']:
         named_blocks = name_blocks(make_blocks(func['instrs']))
@@ -46,8 +45,8 @@ def make_cfg():
                     cfg[name] = [named_blocks[i+1][0]]
                 else:
                     cfg[name] = []
-    print(cfg)
+    return cfg
 
 
 if __name__ == "__main__":
-    make_cfg()
+    print(make_cfg(json.load(sys.stdin)))
