@@ -1,0 +1,12 @@
+entry:
+  in:  ∅
+  out: a/entry, cond/entry, b/entry
+left:
+  in:  a/entry, cond/entry, b/entry
+  out: a/entry, cond/entry, b/left, c/left
+right:
+  in:  a/entry, cond/entry, b/entry
+  out: a/right, cond/entry, b/entry, c/right
+end:
+  in:  a/entry, a/right, cond/entry, b/entry, b/left, c/left, c/right
+  out: a/entry, a/right, cond/entry, b/entry, b/left, c/left, c/right, d/end

@@ -1,0 +1,12 @@
+entry:
+  in:  cond/main.arg
+  out: cond/main.arg, b/entry, a/entry
+left:
+  in:  cond/main.arg, b/entry, a/entry
+  out: cond/main.arg, b/left, a/entry, c/left
+right:
+  in:  cond/main.arg, b/entry, a/entry
+  out: cond/main.arg, b/entry, a/right, c/right
+end:
+  in:  cond/main.arg, b/entry, b/left, a/entry, a/right, c/left, c/right
+  out: cond/main.arg, b/entry, b/left, a/entry, a/right, c/left, c/right, d/end
