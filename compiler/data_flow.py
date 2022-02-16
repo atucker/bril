@@ -114,7 +114,10 @@ def do_reachability():
 
         # Add to the worklist if our results changed
         if prev_outpt_str != stringify_var_version_set(outpt):
-            worklist += [(succ, blocks[succ]) for succ in successors[name]]
+            work_names = set(w[0] for w in worklist)
+            for succ in successors[name]:
+                if succ not in work_names:
+                    worklist += [(succ, blocks[succ]) for succ in successors[name]]
 
     for name in blocks.keys():
         print(f"{name}:")
