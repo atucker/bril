@@ -1,12 +1,13 @@
+reachability
 entry:
   in:  cond/main.arg
-  out: cond/main.arg, b/entry, a/entry
+  out: a/entry, b/entry, cond/main.arg
 left:
-  in:  cond/main.arg, b/entry, a/entry
-  out: cond/main.arg, b/left, a/entry, c/left
+  in:  a/entry, b/entry, cond/main.arg
+  out: a/entry, b/left, c/left, cond/main.arg
 right:
-  in:  cond/main.arg, b/entry, a/entry
-  out: cond/main.arg, b/entry, a/right, c/right
+  in:  a/entry, b/entry, cond/main.arg
+  out: a/right, b/entry, c/right, cond/main.arg
 end:
-  in:  cond/main.arg, b/entry, b/left, a/entry, a/right, c/left, c/right
-  out: cond/main.arg, b/entry, b/left, a/entry, a/right, c/left, c/right, d/end
+  in:  a/entry, a/right, b/entry, b/left, c/left, c/right, cond/main.arg
+  out: a/entry, a/right, b/entry, b/left, c/left, c/right, cond/main.arg, d/end

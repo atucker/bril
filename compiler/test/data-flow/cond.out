@@ -1,12 +1,13 @@
+reachability
 entry:
   in:  ∅
-  out: a/entry, cond/entry, b/entry
+  out: a/entry, b/entry, cond/entry
 left:
-  in:  a/entry, cond/entry, b/entry
-  out: a/entry, cond/entry, b/left, c/left
+  in:  a/entry, b/entry, cond/entry
+  out: a/entry, b/left, c/left, cond/entry
 right:
-  in:  a/entry, cond/entry, b/entry
-  out: a/right, cond/entry, b/entry, c/right
+  in:  a/entry, b/entry, cond/entry
+  out: a/right, b/entry, c/right, cond/entry
 end:
-  in:  a/entry, a/right, cond/entry, b/entry, b/left, c/left, c/right
-  out: a/entry, a/right, cond/entry, b/entry, b/left, c/left, c/right, d/end
+  in:  a/entry, a/right, b/entry, b/left, c/left, c/right, cond/entry
+  out: a/entry, a/right, b/entry, b/left, c/left, c/right, cond/entry, d/end
