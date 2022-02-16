@@ -56,7 +56,7 @@ def stringify_var_version_set(var_varsion_set):
         return NULL
     for var, versions in var_varsion_set.items():
         assert len(versions) > 0
-        for ver in versions:
+        for ver in sorted(versions):
             ans += f"{var}/{ver}, "
     return ans[:-2]
 
@@ -65,6 +65,10 @@ def do_reachability():
     prog = json.load(sys.stdin)
     blocks, successors = cfg.make_cfg(prog)
     predecessors = get_predecessors(successors)
+
+    assert len(sys.argv) in {1, 2}
+    mode = sys.argv[1]
+    assert mode.lower() in {'reachability'}
 
     in_reachable = {}
     # Do this manually instead of using a defaultdict so that the program
@@ -84,7 +88,7 @@ def do_reachability():
         in_reachable[key] = OrderedDict()
         if 'args' in func:
             for arg in func['args']:
-                in_reachable[key][arg['name']] = {f'{key}.arg'}
+                in_reachable[key][arg['name']] = {f"{func['name']}.arg"}
 
     worklist = [*blocks.items()]
     for name, instrs in worklist:
