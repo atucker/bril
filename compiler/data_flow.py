@@ -39,14 +39,14 @@ def get_defined(instrs):
 
 
 def join_vars(left, right):
-    ans = OrderedDict()
+    ans = {}
     for key in left.keys():
-        ans[key] = left[key]
+        ans[key] = set(left[key])
     for key in right.keys():
         if key in ans:
             ans[key] |= right[key]
         else:
-            ans[key] = right[key]
+            ans[key] = set(right[key])
     return ans
 
 
@@ -85,7 +85,7 @@ def do_reachability():
         if len(prog['functions']) == 1:
             key = 'entry'
 
-        in_reachable[key] = OrderedDict()
+        in_reachable[key] = {}
         if 'args' in func:
             for arg in func['args']:
                 in_reachable[key][arg['name']] = {f"{func['name']}.arg"}
@@ -101,7 +101,7 @@ def do_reachability():
         )
 
         # Compute our output
-        outpt = OrderedDict(**inpt) # copy so we don't mutate the inpt
+        outpt = dict(**inpt) # copy so we don't mutate the inpt
         defined = get_defined(instrs)
         for var in defined:
             # If it's already there, overwrite
