@@ -10,7 +10,7 @@ NULL = "∅"
 
 
 class Spec:
-    def __init__(self, *, direction, init, merge, transfer):
+    def __init__(self, *, direction, init, merge, transfer, stringify):
         """
         init should mutate inputs
         merge and transfer should not mutate inputs
@@ -20,6 +20,7 @@ class Spec:
         self.init = init
         self.merge = merge
         self.transfer = transfer
+        self.stringify = stringify
 
 
 def get_predecessors(successors):
@@ -38,6 +39,14 @@ def get_defined(instrs):
         if 'dest' in instr:
             defined = defined | {instr['dest']}
     return defined
+
+
+def get_used(instrs):
+    used = set()
+    for instr in instrs:
+        if 'args' in instr:
+            used = used | set(instr['args'])
+    return used
 
 
 def join_vars(left, right):
@@ -64,6 +73,15 @@ def stringify_var_version_set(var_varsion_set):
     return ans[:-2]
 
 
+def stringify_vars(var_varsion_set):
+    ans = ""
+    if len(var_varsion_set.keys()) == 0:
+        return NULL
+    for var in sorted(var_varsion_set.keys()):
+        ans += f"{var}, "
+    return ans[:-2]
+
+
 def copy_var_version_set(var_version_set):
     ans = {}
     for var, versions in var_version_set.items():
@@ -84,37 +102,52 @@ def run_worklist_algorithm(spec):
 
     spec.init(prog, block_in, block_out)
 
-    if spec.direction == BACKWARD:
-        block_in, block_out = block_out, block_in
-        predecessors, successors = successors, predecessors
+    worklist = [*blocks.keys()]
+    while len(worklist) > 0:
+        name = worklist.pop()
+        print(f"{name}")
+        print(f"\tBefore:")
+        print(f"\t\t{block_in[name]}")
+        print(f"\t\t{block_out[name]}")
 
-    worklist = [*blocks.items()]
-    for name, instrs in worklist:
-        # Cache what we had before
-        prev_outpt_str = stringify_var_version_set(block_out[name])
-
-        block_in[name] = inpt = spec.merge(
-            block_in[name],
-            [copy_var_version_set(block_out[p]) for p in predecessors[name]]
-        )
-        block_out[name] = outpt = spec.transfer(
-            copy_var_version_set(inpt), name, instrs
-        )
-
-        # Add to the worklist if our results changed
-        if prev_outpt_str != stringify_var_version_set(outpt):
-            work_names = set(w[0] for w in worklist)
-            for succ in successors[name]:
-                if succ not in work_names:
-                    worklist += [(succ, blocks[succ])]
-
-    if spec.direction == BACKWARD:
-        block_in, block_out = block_out, block_in
+        instrs = blocks[name]
+        if spec.direction == FORWARD:
+            prev_str = spec.stringify(block_out[name])
+            block_in[name] = inpt = spec.merge(
+                block_in[name],
+                [copy_var_version_set(block_out[p]) for p in predecessors[name]]
+            )
+            block_out[name] = outpt = spec.transfer(
+                copy_var_version_set(inpt), name, instrs
+            )
+            if prev_str != spec.stringify(outpt):
+                for succ in successors[name]:
+                    if succ not in worklist:
+                        worklist.append(succ)
+        elif spec.direction == BACKWARD:
+            prev_str = spec.stringify(block_in[name])
+            block_out[name] = outpt = spec.merge(
+                block_out[name],
+                [copy_var_version_set(block_in[p]) for p in successors[name]]
+            )
+            block_in[name] = inpt = spec.transfer(
+                copy_var_version_set(outpt), name, instrs
+            )
+            if prev_str != spec.stringify(inpt):
+                print(predecessors[name])
+                for pred in predecessors[name]:
+                    if pred not in worklist:
+                        worklist.append(pred)
+        else:
+            raise NotImplementedError()
+        print(f"\tAfter:")
+        print(f"\t\t{block_in[name]}")
+        print(f"\t\t{block_out[name]}")
 
     for name in blocks.keys():
         print(f"{name}:")
-        print(f"  in:  {stringify_var_version_set(block_in[name])}")
-        print(f"  out: {stringify_var_version_set(block_out[name])}")
+        print(f"  in:  {spec.stringify(block_in[name])}")
+        print(f"  out: {spec.stringify(block_out[name])}")
 
 
 def init_add_args(prog, inpt, outpt):
@@ -143,16 +176,49 @@ def reachability_transfer(inpt, name, instrs):
     return outpt
 
 
+def live_transfer(outpt, name, instrs):
+    inpt = copy_var_version_set(outpt)
+    used = set()
+    defined = set()
+    # order matters so I have to do a loop that does both of these
+    for instr in instrs:
+        if 'args' in instr:
+            for var in instr['args']:
+                if var not in defined:
+                    used |= {var}
+        if 'dest' in instr:
+            dest = instr['dest']
+            if dest in inpt:
+                del inpt[dest]
+            defined |= {dest}
+
+    for var in used:
+        if var not in inpt:
+            inpt[var] = set()
+        inpt[var] |= {name}
+
+    return inpt
+
+
 def route_worklists():
     assert len(sys.argv) in {1, 2}
     mode = sys.argv[1]
-
+    print(mode)
     if mode == 'reachability':
         run_worklist_algorithm(Spec(
             direction=FORWARD,
             init=init_add_args,
             merge=merge,
-            transfer=reachability_transfer
+            transfer=reachability_transfer,
+            stringify=stringify_var_version_set
+        ))
+    elif mode == 'live':
+        run_worklist_algorithm(Spec(
+            direction=BACKWARD,
+            init=lambda *args: None,
+            merge=merge,
+            transfer=live_transfer,
+            stringify=stringify_var_version_set
         ))
     else:
         raise NotImplementedError()
