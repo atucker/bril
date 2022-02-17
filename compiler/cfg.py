@@ -1,5 +1,6 @@
 import json
 import sys
+from collections import OrderedDict
 
 TERMINATORS = {'jmp', 'br', 'ret'}
 
@@ -20,34 +21,39 @@ def make_blocks(body):
     if cur_block: yield cur_block
 
 
-def name_blocks(blocks):
-    named_blocks = []
+def name_blocks(func_name, blocks):
+    named_blocks = OrderedDict()
     for block in blocks:
-        name = f"b{len(named_blocks)}"
-        print(block)
+        name = f"{func_name}b{len(named_blocks)}"
         if 'label' in block[0]:
-            name = block[0]['label']
-        named_blocks.append((name, block))
+            name = f"{func_name}{block[0]['label']}"
+        elif len(named_blocks) == 0:
+            name = f"{func_name}entry"
+        named_blocks[name] = block
     return named_blocks
 
 
-def make_cfg():
-    prog = json.load(sys.stdin)
-    cfg = {}
+def make_cfg(prog):
+    cfg = OrderedDict()
+    named_blocks = OrderedDict()
     for func in prog['functions']:
-        named_blocks = name_blocks(make_blocks(func['instrs']))
-        for i, (name, block) in enumerate(named_blocks):
+        func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
+        func_blocks = name_blocks(func_name, make_blocks(func['instrs']))
+        for name, block in func_blocks.items():
+            named_blocks[name] = block
+
+        for i, (name, block) in enumerate(named_blocks.items()):
             if 'op' in block[-1] and block[-1]['op'] in {'jmp', 'br'}:
-                cfg[name] = block[-1]['labels']
+                cfg[name] = [f"{func_name}{l}" for l in block[-1]['labels']]
             elif 'op' in block[-1] and block[-1]['op'] == 'ret':
                 cfg[name] = []
             else:
                 if i + 1 < len(named_blocks):
-                    cfg[name] = [named_blocks[i+1][0]]
+                    cfg[name] = [list(named_blocks.keys())[i+1]]
                 else:
                     cfg[name] = []
-    print(cfg)
+    return named_blocks, cfg
 
 
 if __name__ == "__main__":
-    make_cfg()
+    print(make_cfg(json.load(sys.stdin))[1])
