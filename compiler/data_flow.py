@@ -87,7 +87,7 @@ def run_worklist_algorithm(spec):
         print(f"  out: {spec.stringify(block_out[name])}")
 
 
-def init_add_args(prog, blocks):
+def init_add_args_var_version_set(prog, blocks):
     block_in = {}
     block_out = {}
     for name in blocks.keys():
@@ -142,8 +142,7 @@ def copy_var_version_set(var_version_set):
     return ans
 
 
-def reachability_transfer(inpt, name, instrs):
-    outpt = copy_var_version_set(inpt)
+def reachability_transfer(outpt, name, instrs):
     defined = get_defined(instrs)
     for var in defined:
         # If it's already there, overwrite
@@ -152,8 +151,32 @@ def reachability_transfer(inpt, name, instrs):
     return outpt
 
 
+def init_var_set(prog, blocks):
+    block_in = {}
+    block_out = {}
+    for name in blocks.keys():
+        block_in[name] = set()
+        block_out[name] = set()
+
+    return block_in, block_out
+
+
+def merge_var_set(start_input, inpts):
+    return reduce(lambda left, right: left | right, inpts, start_input)
+
+
+def stringify_var_set(var_set):
+    if len(var_set) == 0:
+        return NULL
+    return ', '.join(sorted(var_set))
+
+
+def copy_var_set(var_set):
+    return set(var_set)
+
+
 def live_transfer(outpt, name, instrs):
-    inpt = copy_var_version_set(outpt)
+    inpt = copy_var_set(outpt)
     used = set()
     defined = set()
     # order matters so I have to do a loop that does both of these
@@ -164,16 +187,10 @@ def live_transfer(outpt, name, instrs):
                     used |= {var}
         if 'dest' in instr:
             dest = instr['dest']
-            if dest in inpt:
-                del inpt[dest]
+            inpt -= {dest}
             defined |= {dest}
 
-    for var in used:
-        if var not in inpt:
-            inpt[var] = set()
-        inpt[var] |= {name}
-
-    return inpt
+    return inpt | used
 
 
 def route_worklists():
@@ -183,7 +200,7 @@ def route_worklists():
     if mode == 'reachability':
         run_worklist_algorithm(Spec(
             direction=FORWARD,
-            init=init_add_args,
+            init=init_add_args_var_version_set,
             merge=merge_var_version_set,
             transfer=reachability_transfer,
             copy=copy_var_version_set,
@@ -192,10 +209,11 @@ def route_worklists():
     elif mode == 'live':
         run_worklist_algorithm(Spec(
             direction=BACKWARD,
-            init=lambda *args: None,
-            merge=lambda *args: None,
+            init=init_var_set,
+            merge=merge_var_set,
             transfer=live_transfer,
-            stringify=stringify_var_version_set
+            copy=copy_var_set,
+            stringify=stringify_var_set
         ))
     else:
         raise NotImplementedError()
