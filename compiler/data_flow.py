@@ -102,6 +102,10 @@ def run_worklist_algorithm(spec):
 
     spec.init(prog, block_in, block_out)
 
+    if spec.direction == BACKWARD:
+        block_in, block_out = block_out, block_in
+        predecessors, successors = successors, predecessors
+
     worklist = [*blocks.keys()]
     while len(worklist) > 0:
         name = worklist.pop()
@@ -111,38 +115,27 @@ def run_worklist_algorithm(spec):
         print(f"\t\t{block_out[name]}")
 
         instrs = blocks[name]
-        if spec.direction == FORWARD:
-            prev_str = spec.stringify(block_out[name])
-            block_in[name] = inpt = spec.merge(
-                block_in[name],
-                [copy_var_version_set(block_out[p]) for p in predecessors[name]]
-            )
-            block_out[name] = outpt = spec.transfer(
-                copy_var_version_set(inpt), name, instrs
-            )
-            if prev_str != spec.stringify(outpt):
-                for succ in successors[name]:
-                    if succ not in worklist:
-                        worklist.append(succ)
-        elif spec.direction == BACKWARD:
-            prev_str = spec.stringify(block_in[name])
-            block_out[name] = outpt = spec.merge(
-                block_out[name],
-                [copy_var_version_set(block_in[p]) for p in successors[name]]
-            )
-            block_in[name] = inpt = spec.transfer(
-                copy_var_version_set(outpt), name, instrs
-            )
-            if prev_str != spec.stringify(inpt):
-                print(predecessors[name])
-                for pred in predecessors[name]:
-                    if pred not in worklist:
-                        worklist.append(pred)
-        else:
-            raise NotImplementedError()
+
+        prev_str = spec.stringify(block_out[name])
+        block_in[name] = inpt = spec.merge(
+            block_in[name],
+            [copy_var_version_set(block_out[p]) for p in predecessors[name]]
+        )
+        block_out[name] = outpt = spec.transfer(
+            copy_var_version_set(inpt), name, instrs
+        )
+        if prev_str != spec.stringify(outpt):
+            for succ in successors[name]:
+                if succ not in worklist:
+                    worklist.append(succ)
+
         print(f"\tAfter:")
         print(f"\t\t{block_in[name]}")
         print(f"\t\t{block_out[name]}")
+
+    if spec.direction == BACKWARD:
+        block_in, block_out = block_out, block_in
+        predecessors, successors = successors, predecessors
 
     for name in blocks.keys():
         print(f"{name}:")
