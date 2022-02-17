@@ -49,7 +49,7 @@ def make_cfg(prog):
                 cfg[name] = []
             else:
                 if i + 1 < len(named_blocks):
-                    cfg[name] = [named_blocks[i+1][0]]
+                    cfg[name] = [list(named_blocks.keys())[i+1]]
                 else:
                     cfg[name] = []
     return named_blocks, cfg
