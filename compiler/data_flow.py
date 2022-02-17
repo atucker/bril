@@ -10,7 +10,7 @@ NULL = "∅"
 
 
 class Spec:
-    def __init__(self, *, direction, init, merge, transfer, stringify):
+    def __init__(self, *, direction, init, merge, transfer, copy, stringify):
         """
         init should mutate inputs
         merge and transfer should not mutate inputs
@@ -20,6 +20,7 @@ class Spec:
         self.init = init
         self.merge = merge
         self.transfer = transfer
+        self.copy = copy
         self.stringify = stringify
 
 
@@ -49,7 +50,64 @@ def get_used(instrs):
     return used
 
 
-def join_vars(left, right):
+def run_worklist_algorithm(spec):
+    prog = json.load(sys.stdin)
+    blocks, successors = cfg.make_cfg(prog)
+    predecessors = get_predecessors(successors)
+
+    block_in, block_out = spec.init(prog, blocks)
+
+    if spec.direction == BACKWARD:
+        block_in, block_out = block_out, block_in
+        predecessors, successors = successors, predecessors
+
+    worklist = [*blocks.keys()]
+    while len(worklist) > 0:
+        name = worklist.pop()
+
+        prev_str = spec.stringify(block_out[name])
+        block_in[name] = inpt = spec.merge(
+            block_in[name],
+            [spec.copy(block_out[p]) for p in predecessors[name]]
+        )
+        block_out[name] = outpt = spec.transfer(
+            spec.copy(inpt), name, blocks[name]
+        )
+        if prev_str != spec.stringify(outpt):
+            for succ in successors[name]:
+                if succ not in worklist:
+                    worklist.append(succ)
+
+    if spec.direction == BACKWARD:
+        block_in, block_out = block_out, block_in
+
+    for name in blocks.keys():
+        print(f"{name}:")
+        print(f"  in:  {spec.stringify(block_in[name])}")
+        print(f"  out: {spec.stringify(block_out[name])}")
+
+
+def init_add_args(prog, blocks):
+    block_in = {}
+    block_out = {}
+    for name in blocks.keys():
+        block_in[name] = {}
+        block_out[name] = {}
+
+    for func in prog['functions']:
+        key = f"{func['name']}.entry"
+        if len(prog['functions']) == 1:
+            key = 'entry'
+
+        block_in[key] = {}
+        if 'args' in func:
+            for arg in func['args']:
+                block_in[key][arg['name']] = {f"{func['name']}.arg"}
+
+    return block_in, block_out
+
+
+def join_var_version_set(left, right):
     ans = {}
     for key in left.keys():
         ans[key] = set(left[key])
@@ -59,6 +117,10 @@ def join_vars(left, right):
         else:
             ans[key] = set(right[key])
     return ans
+
+
+def merge_var_version_set(start_input, inpts):
+    return reduce(join_var_version_set, inpts, start_input)
 
 
 def stringify_var_version_set(var_varsion_set):
@@ -73,80 +135,11 @@ def stringify_var_version_set(var_varsion_set):
     return ans[:-2]
 
 
-def stringify_vars(var_varsion_set):
-    ans = ""
-    if len(var_varsion_set.keys()) == 0:
-        return NULL
-    for var in sorted(var_varsion_set.keys()):
-        ans += f"{var}, "
-    return ans[:-2]
-
-
 def copy_var_version_set(var_version_set):
     ans = {}
     for var, versions in var_version_set.items():
         ans[var] = set(versions)
     return ans
-
-
-def run_worklist_algorithm(spec):
-    prog = json.load(sys.stdin)
-    blocks, successors = cfg.make_cfg(prog)
-    predecessors = get_predecessors(successors)
-
-    block_in = {}
-    block_out = {}
-    for name in blocks.keys():
-        block_in[name] = {}
-        block_out[name] = {}
-
-    spec.init(prog, block_in, block_out)
-
-    if spec.direction == BACKWARD:
-        block_in, block_out = block_out, block_in
-        predecessors, successors = successors, predecessors
-
-    worklist = [*blocks.keys()]
-    while len(worklist) > 0:
-        name = worklist.pop()
-
-        prev_str = spec.stringify(block_out[name])
-        block_in[name] = inpt = spec.merge(
-            block_in[name],
-            [copy_var_version_set(block_out[p]) for p in predecessors[name]]
-        )
-        block_out[name] = outpt = spec.transfer(
-            copy_var_version_set(inpt), name, blocks[name]
-        )
-        if prev_str != spec.stringify(outpt):
-            for succ in successors[name]:
-                if succ not in worklist:
-                    worklist.append(succ)
-
-    if spec.direction == BACKWARD:
-        block_in, block_out = block_out, block_in
-        predecessors, successors = successors, predecessors
-
-    for name in blocks.keys():
-        print(f"{name}:")
-        print(f"  in:  {spec.stringify(block_in[name])}")
-        print(f"  out: {spec.stringify(block_out[name])}")
-
-
-def init_add_args(prog, inpt, outpt):
-    for func in prog['functions']:
-        key = f"{func['name']}.entry"
-        if len(prog['functions']) == 1:
-            key = 'entry'
-
-        inpt[key] = {}
-        if 'args' in func:
-            for arg in func['args']:
-                inpt[key][arg['name']] = {f"{func['name']}.arg"}
-
-
-def merge(start_input, inpts):
-    return reduce(join_vars, inpts, start_input)
 
 
 def reachability_transfer(inpt, name, instrs):
@@ -191,15 +184,16 @@ def route_worklists():
         run_worklist_algorithm(Spec(
             direction=FORWARD,
             init=init_add_args,
-            merge=merge,
+            merge=merge_var_version_set,
             transfer=reachability_transfer,
+            copy=copy_var_version_set,
             stringify=stringify_var_version_set
         ))
     elif mode == 'live':
         run_worklist_algorithm(Spec(
             direction=BACKWARD,
             init=lambda *args: None,
-            merge=merge,
+            merge=lambda *args: None,
             transfer=live_transfer,
             stringify=stringify_var_version_set
         ))
