@@ -109,12 +109,6 @@ def run_worklist_algorithm(spec):
     worklist = [*blocks.keys()]
     while len(worklist) > 0:
         name = worklist.pop()
-        print(f"{name}")
-        print(f"\tBefore:")
-        print(f"\t\t{block_in[name]}")
-        print(f"\t\t{block_out[name]}")
-
-        instrs = blocks[name]
 
         prev_str = spec.stringify(block_out[name])
         block_in[name] = inpt = spec.merge(
@@ -122,16 +116,12 @@ def run_worklist_algorithm(spec):
             [copy_var_version_set(block_out[p]) for p in predecessors[name]]
         )
         block_out[name] = outpt = spec.transfer(
-            copy_var_version_set(inpt), name, instrs
+            copy_var_version_set(inpt), name, blocks[name]
         )
         if prev_str != spec.stringify(outpt):
             for succ in successors[name]:
                 if succ not in worklist:
                     worklist.append(succ)
-
-        print(f"\tAfter:")
-        print(f"\t\t{block_in[name]}")
-        print(f"\t\t{block_out[name]}")
 
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
