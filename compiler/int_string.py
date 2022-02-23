@@ -10,12 +10,14 @@ This library makes no promises to work, but is hopefully helpful for debugging.
 Bril uses 64 bit integers. This is enough for us to fit 10 characters if we only
 have 6 bits/character, achievable by using half of the ascii chart.
 
-Each string starts with 1010, then is right padded with SPACE.
+Each string starts with 0101, then is right padded with SPACE.
 
 Currently there is no support for >10 character strings, though plausibly a
 decent way of handling them would just be to say that if you want more
 characters, end your string with DEL and then we'll keep going.
 """
+
+import sys
 
 
 def char_to_bits(c):
@@ -55,6 +57,7 @@ def bits_to_char(b):
 
 def int_to_str(i):
     bits = bin(i)[2:]
+    assert bits[:3] == '0101'
     bits = bits[3:]
     assert len(bits) == 60
     ans = ""
@@ -62,3 +65,28 @@ def int_to_str(i):
         ans += bits_to_char(bits[:6])
         bits = bits[6:]
     return ans.strip()
+
+
+if __name__ == "__main__":
+    assert len(sys.argv) in {1, 2}
+
+    mode = "decode"
+    if len(sys.argv) == 2:
+        mode = sys.argv[1]
+
+    # If you're given some lines try to turn them into strings
+    for line in sys.stdin:
+        try:
+            if mode == 'decode':
+                line = int_to_str(int(line))
+            elif mode == 'encode':
+                line = str_to_int(line.strip(line))
+            elif mode == 'roundtrip':
+                line = int_to_str(str_to_int(line))
+            else:
+                raise NotImplementedError()
+        except AssertionError:
+            pass
+        except ValueError:
+            pass
+        print(line)
