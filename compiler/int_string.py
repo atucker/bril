@@ -8,7 +8,9 @@ turn into strings.
 This library makes no promises to work, but is hopefully helpful for debugging.
 
 Bril uses 64 bit integers. This is enough for us to fit 10 characters if we only
-have 6 bits/character, achievable by using half of the ascii chart.
+have 6 bits/character, achievable by using half of the ascii chart, specifically
+SPACE through ? and ` through DEL. This gives us numbers, lowercase, and some
+punctuation.
 
 Each string starts with 0101, then is right padded with SPACE.
 
@@ -57,14 +59,24 @@ def bits_to_char(b):
 
 def int_to_str(i):
     bits = bin(i)[2:]
-    assert bits[:3] == '0101'
-    bits = bits[3:]
+    bits = '0' * (64 - len(bits)) + bits
+    assert len(bits) == 64
+    assert bits[:4] == '0101'
+    bits = bits[4:]
     assert len(bits) == 60
     ans = ""
     while bits:
         ans += bits_to_char(bits[:6])
         bits = bits[6:]
     return ans.strip()
+
+
+def print_str(s):
+    i = str_to_int(s)
+    return [
+        {"dest": "string", "op": "const", "type": "int", "value": i},
+        {"op": "print", "args": ["string"]}
+    ]
 
 
 if __name__ == "__main__":
@@ -76,6 +88,7 @@ if __name__ == "__main__":
 
     # If you're given some lines try to turn them into strings
     for line in sys.stdin:
+        line = line.strip()
         try:
             if mode == 'decode':
                 line = int_to_str(int(line))
@@ -89,4 +102,4 @@ if __name__ == "__main__":
             pass
         except ValueError:
             pass
-        print(line)
+        print(line.strip())

@@ -1,6 +1,7 @@
 import json
 import sys
 from collections import OrderedDict
+import int_string
 
 TERMINATORS = {'jmp', 'br', 'ret'}
 
@@ -55,6 +56,20 @@ def make_func_cfg(func, func_name=''):
     return cfg, named_blocks
 
 
+def add_cfg_prints(named_blocks):
+    for name, block in named_blocks.items():
+        name = name.lower()
+        if len(name) > 10:
+            print(f"Warning, truncating name {name} to {name[:10]}", sys.stderr)
+
+        print_instrs = int_string.print_str(name[:10])
+        idx = 0
+        if 'label' in block[0]:
+            idx = 1
+        block.insert(idx, print_instrs[1])
+        block.insert(idx, print_instrs[0])
+
+
 def make_cfg(prog):
     cfg = OrderedDict()
     named_blocks = OrderedDict()
@@ -69,5 +84,23 @@ def make_cfg(prog):
     return named_blocks, cfg
 
 
+def annotate_program(prog):
+    for func in prog['functions']:
+        func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
+        _, blocks = make_func_cfg(func, func_name)
+        add_cfg_prints(blocks)
+        func['instrs'] = []
+        for _, block in blocks.items():
+            func['instrs'] += block
+    return prog
+
+
 if __name__ == "__main__":
-    print(make_cfg(json.load(sys.stdin))[1])
+    assert len(sys.argv) in {1, 2}
+    mode = 'cfg'
+    if len(sys.argv) == 2:
+        mode = sys.argv[1]
+    if mode == 'cfg':
+        print(make_cfg(json.load(sys.stdin))[1])
+    elif mode == 'annotate':
+        print(json.dumps(annotate_program(json.load(sys.stdin))))
