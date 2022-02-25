@@ -7,15 +7,20 @@ TERMINATORS = {'jmp', 'br', 'ret'}
 
 
 def make_blocks(body):
+    yielded = False
     cur_block = []
     for instr in body:
         if 'op' in instr:
             cur_block.append(instr)
             if instr['op'] in TERMINATORS:
-                if cur_block: yield cur_block
+                if cur_block or not yielded:
+                    yielded = True
+                    yield cur_block
                 cur_block = []
         elif 'label' in instr:
-            if cur_block: yield cur_block
+            if cur_block or not yielded:
+                yielded = True
+                yield cur_block
             cur_block = [instr]
         else:
             assert False, f"{instr} has neither an op nor label"
@@ -26,7 +31,7 @@ def name_blocks(func_name, blocks):
     named_blocks = OrderedDict()
     for block in blocks:
         name = f"{func_name}b{len(named_blocks)}"
-        if 'label' in block[0]:
+        if block and 'label' in block[0]:
             name = f"{func_name}{block[0]['label']}"
         elif len(named_blocks) == 0:
             name = f"{func_name}entry"
@@ -53,9 +58,9 @@ def make_func_cfg(func, func_name=''):
         named_blocks[name] = block
 
     for i, (name, block) in enumerate(named_blocks.items()):
-        if 'op' in block[-1] and block[-1]['op'] in {'jmp', 'br'}:
+        if block and 'op' in block[-1] and block[-1]['op'] in {'jmp', 'br'}:
             cfg[name] = [f"{func_name}{l}" for l in block[-1]['labels']]
-        elif 'op' in block[-1] and block[-1]['op'] == 'ret':
+        elif block and 'op' in block[-1] and block[-1]['op'] == 'ret':
             cfg[name] = []
         else:
             if i + 1 < len(named_blocks):
