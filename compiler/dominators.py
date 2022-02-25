@@ -30,7 +30,26 @@ def make_dominators(successors):
 
 
 def dominance_tree(dom):
-    pass
+    tree = {}
+    predecessors = {}
+    # Put the entry points in place
+    for node, dominated_by in dom.items():
+        if dominated_by == {node}:
+            tree[node] = set()
+
+    changed = True
+    while changed:
+        changed = False
+        for pred, ancestors in dom.items():
+            for node, dominated_by in dom.items():
+                if node != pred and dominated_by == {node} | ancestors:
+                    if node not in tree[pred]:
+                        tree[pred] = tree[pred] | {node}
+                        changed = True
+                    if node not in tree:
+                        tree[node] = set()
+                        changed = True
+    return tree
 
 
 def dominance_frontier(dom):
