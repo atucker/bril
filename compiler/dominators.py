@@ -3,6 +3,8 @@ from collections import OrderedDict
 import cfg
 import json
 import sys
+import os
+import subprocess
 
 
 def make_dominators(successors):

@@ -75,11 +75,11 @@ def add_cfg_prints(named_blocks):
     for name, block in named_blocks.items():
         name = name.lower()
         if len(name) > 10:
-            print(f"Warning, truncating name {name} to {name[:10]}", sys.stderr)
+            print(f"Warning, truncating name {name} to {name[:10]}", file=sys.stderr)
 
         print_instrs = int_string.print_str(name[:10])
         idx = 0
-        if 'label' in block[0]:
+        if block and 'label' in block[0]:
             idx = 1
         block.insert(idx, print_instrs[1])
         block.insert(idx, print_instrs[0])
