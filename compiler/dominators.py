@@ -77,6 +77,22 @@ def dominance_frontier(successors, dom):
     return frontier
 
 
+def check(dom, in_fname):
+    seen = set()
+    all_good = True
+    for line in open(in_fname, 'r').readlines():
+        line = line.strip()
+        try: # skip ints
+            int(line)
+        except ValueError:
+            if not dom[line].issubset(seen):
+                all_good = False
+                print(f"Mistake found: in {line}, saw {seen}, "
+                      f"but dominated by {dom[line]}")
+            seen |= {line}
+    return all_good
+
+
 def sort_json(data):
     sorted_data = OrderedDict()
     for key in sorted(data.keys()):
@@ -86,9 +102,9 @@ def sort_json(data):
 
 def route_commands():
     prog = json.load(sys.stdin)
-    assert len(sys.argv) in {1, 2}
+    assert len(sys.argv) in {1, 2, 3}
     mode = 'dom'
-    if len(sys.argv) == 2:
+    if len(sys.argv) > 1:
         mode = sys.argv[1]
 
     def output(json_data):
@@ -102,6 +118,11 @@ def route_commands():
         output(dominance_tree(dom))
     elif mode == 'front':
         output(dominance_frontier(successors, dom))
+    elif mode == 'check':
+        assert len(sys.argv) == 3
+        fname = sys.argv[2]
+        trace_fname = fname + ".trace"
+        print(check(dom, trace_fname))
 
 
 if __name__ == "__main__":
