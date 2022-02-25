@@ -1,0 +1,2 @@
+#command = "bril2json < {filename} | python3 ../../../dominators.py check {filename}"
+command = "bril2json < {filename} | python3 ../../../cfg.py annotate | brili |  python3 ../../../int_string.py > {filename}.trace; bril2json < {filename} | python3 ../../../dominators.py check {filename}"

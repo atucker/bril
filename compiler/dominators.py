@@ -82,16 +82,18 @@ def dominance_frontier(successors, dom):
 def check(dom, in_fname):
     seen = set()
     all_good = True
-    for line in open(in_fname, 'r').readlines():
+    file = open(in_fname, 'r')
+    for line in file.readlines():
         line = line.strip()
         try: # skip ints
             int(line)
         except ValueError:
+            seen |= {line}
             if not dom[line].issubset(seen):
                 all_good = False
                 print(f"Mistake found: in {line}, saw {seen}, "
                       f"but dominated by {dom[line]}")
-            seen |= {line}
+    file.close()
     return all_good
 
 
