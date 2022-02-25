@@ -24,16 +24,6 @@ class Spec:
         self.stringify = stringify
 
 
-def get_predecessors(successors):
-    ans = {}
-    for name, _ in successors.items():
-        ans[name] = []
-    for name, ss in successors.items():
-        for successor in ss:
-            ans[successor].append(name)
-    return ans
-
-
 def get_defined(instrs):
     defined = set()
     for instr in instrs:
@@ -53,7 +43,7 @@ def get_used(instrs):
 def run_worklist_algorithm(spec):
     prog = json.load(sys.stdin)
     blocks, successors = cfg.make_cfg(prog)
-    predecessors = get_predecessors(successors)
+    predecessors = cfg.get_predecessors(successors)
 
     block_in, block_out = spec.init(prog, blocks)
 
