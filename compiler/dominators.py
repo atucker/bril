@@ -79,10 +79,13 @@ def dominance_frontier(successors, dom):
     return frontier
 
 
-def check(dom, in_fname):
+def check(old_dom, in_fname):
     seen = set()
     all_good = True
     file = open(in_fname, 'r')
+    dom = {}
+    for key, values in old_dom.items():
+        dom[key[:10].replace('_', '.')] = set([n[:10].replace('_', '.') for n in values])
     for line in file.readlines():
         line = line.strip()
         try: # skip ints

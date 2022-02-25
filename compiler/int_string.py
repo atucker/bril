@@ -23,6 +23,8 @@ import sys
 
 
 def char_to_bits(c):
+    if c == '_':
+        c = '.'
     i = ord(c)
     if 32 <= i <= 63:
         i -= 32
