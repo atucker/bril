@@ -34,6 +34,16 @@ def name_blocks(func_name, blocks):
     return named_blocks
 
 
+def get_predecessors(successors):
+    ans = {}
+    for name, _ in successors.items():
+        ans[name] = []
+    for name, ss in successors.items():
+        for successor in ss:
+            ans[successor].append(name)
+    return ans
+
+
 def make_func_cfg(func, func_name=''):
     cfg = OrderedDict()
     named_blocks = OrderedDict()
