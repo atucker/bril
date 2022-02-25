@@ -33,16 +33,35 @@ def dominance_tree(dom):
     pass
 
 
-def dominance_frontier(func_cfg, node):
+def dominance_frontier(dom):
     pass
 
 
-def sort_dom(dom):
-    sorted_dom = OrderedDict()
-    for key in sorted(dom.keys()):
-        sorted_dom[key] = sorted(list(dom[key]))
-    return sorted_dom
+def sort_json(data):
+    sorted_data = OrderedDict()
+    for key in sorted(data.keys()):
+        sorted_data[key] = sorted(list(data[key]))
+    return sorted_data
+
+
+def route_commands():
+    prog = json.load(sys.stdin)
+    assert len(sys.argv) in {1, 2}
+    mode = 'dom'
+    if len(sys.argv) == 2:
+        mode = sys.argv[1]
+
+    def output(json_data):
+        print(json.dumps(sort_json(json_data), indent=2))
+
+    dom = make_dominators(cfg.make_cfg(prog)[1])
+    if mode == 'dom':
+        output(dom)
+    if mode == 'tree':
+        output(dominance_tree(dom))
+    elif mode == 'front':
+        output(dominance_frontier(dom))
 
 
 if __name__ == "__main__":
-    print(json.dumps(sort_dom(make_dominators(cfg.make_cfg(json.load(sys.stdin))[1])), indent=2))
+    route_commands()

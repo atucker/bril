@@ -110,12 +110,17 @@ def annotate_program(prog):
     return prog
 
 
-if __name__ == "__main__":
+def route_commands():
+    prog = json.load(sys.stdin)
     assert len(sys.argv) in {1, 2}
     mode = 'cfg'
     if len(sys.argv) == 2:
         mode = sys.argv[1]
     if mode == 'cfg':
-        print(make_cfg(json.load(sys.stdin))[1])
+        print(make_cfg(prog)[1])
     elif mode == 'annotate':
-        print(json.dumps(annotate_program(json.load(sys.stdin))))
+        print(json.dumps(annotate_program(prog)))
+
+
+if __name__ == "__main__":
+    route_commands()
