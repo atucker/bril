@@ -31,7 +31,6 @@ def make_dominators(successors):
 
 def dominance_tree(dom):
     tree = {}
-    predecessors = {}
     # Put the entry points in place
     for node, dominated_by in dom.items():
         if dominated_by == {node}:
@@ -42,6 +41,8 @@ def dominance_tree(dom):
         changed = False
         for pred, ancestors in dom.items():
             for node, dominated_by in dom.items():
+                # If you find a node which is dominated by your ancestors +
+                # itself, then you've found an immediate successor
                 if node != pred and dominated_by == {node} | ancestors:
                     if node not in tree[pred]:
                         tree[pred] = tree[pred] | {node}
@@ -52,8 +53,28 @@ def dominance_tree(dom):
     return tree
 
 
-def dominance_frontier(dom):
-    pass
+def dominance_frontier(successors, dom):
+    dominates = {}
+    for key in dom.keys():
+        dominates[key] = set()
+    for dominand, values in dom.items():
+        for dominator in values:
+            dominates[dominator] |= {dominand}
+
+    predecessors = cfg.get_predecessors(successors)
+    for key, value in predecessors.items():
+        predecessors[key] = set(value)
+
+    frontier = {}
+    for key in dom.keys():
+        frontier[key] = set()
+    for dominator, dominands in dominates.items():
+        for node, preds in predecessors.items():
+            # strict domination
+            if node not in dominands - {dominator} and preds & dominands:
+                frontier[dominator] |= {node}
+
+    return frontier
 
 
 def sort_json(data):
@@ -73,13 +94,14 @@ def route_commands():
     def output(json_data):
         print(json.dumps(sort_json(json_data), indent=2))
 
-    dom = make_dominators(cfg.make_cfg(prog)[1])
+    successors = cfg.make_cfg(prog)[1]
+    dom = make_dominators(successors)
     if mode == 'dom':
         output(dom)
     if mode == 'tree':
         output(dominance_tree(dom))
     elif mode == 'front':
-        output(dominance_frontier(dom))
+        output(dominance_frontier(successors, dom))
 
 
 if __name__ == "__main__":
