@@ -40,8 +40,7 @@ def get_used(instrs):
     return used
 
 
-def run_worklist_algorithm(spec):
-    prog = json.load(sys.stdin)
+def run_worklist_algorithm(prog, spec, print_output=True):
     blocks, successors = cfg.make_cfg(prog)
     predecessors = cfg.get_predecessors(successors)
 
@@ -71,10 +70,13 @@ def run_worklist_algorithm(spec):
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
 
-    for name in blocks.keys():
-        print(f"{name}:")
-        print(f"  in:  {spec.stringify(block_in[name])}")
-        print(f"  out: {spec.stringify(block_out[name])}")
+    if print_output:
+        for name in blocks.keys():
+            print(f"{name}:")
+            print(f"  in:  {spec.stringify(block_in[name])}")
+            print(f"  out: {spec.stringify(block_out[name])}")
+
+    return block_in, block_out
 
 
 def init_add_args_var_version_set(prog, blocks):
@@ -183,21 +185,25 @@ def live_transfer(outpt, name, instrs):
     return inpt | used
 
 
+REACHABILITY = Spec(
+    direction=FORWARD,
+    init=init_add_args_var_version_set,
+    merge=merge_var_version_set,
+    transfer=reachability_transfer,
+    copy=copy_var_version_set,
+    stringify=stringify_var_version_set
+)
+
+
 def route_worklists():
     assert len(sys.argv) in {1, 2}
     mode = sys.argv[1]
     print(mode)
+    prog = json.load(sys.stdin)
     if mode == 'reachability':
-        run_worklist_algorithm(Spec(
-            direction=FORWARD,
-            init=init_add_args_var_version_set,
-            merge=merge_var_version_set,
-            transfer=reachability_transfer,
-            copy=copy_var_version_set,
-            stringify=stringify_var_version_set
-        ))
+        run_worklist_algorithm(prog, REACHABILITY)
     elif mode == 'live':
-        run_worklist_algorithm(Spec(
+        run_worklist_algorithm(prog, Spec(
             direction=BACKWARD,
             init=init_var_set,
             merge=merge_var_set,
