@@ -22,25 +22,10 @@ def get_defs(named_blocks):
                 var = instr['dest']
                 if var not in defs:
                     defs[var] = set()
-                defs[var] |= {block}
+                defs[var] |= {name}
+    for var, blocks in defs.items():
+        defs[var] = list(blocks)
     return defs
-
-
-def get_defined_variables(named_blocks):
-    defined_variables = {}
-    for name, block in named_blocks.items():
-        defined_variables[name] = set()
-        for instr in block:
-            if 'dest' in instr:
-                defined_variables[name] |= {instr['dest']}
-    return defined_variables
-
-
-def get_used_variables(named_blocks):
-    used_variables = {}
-    for name, block in named_blocks.items():
-        used_variables[name] = data_flow.get_used(block)
-    return used_variables
 
 
 def get_var_types(prog):
@@ -57,81 +42,79 @@ def to_ssa(prog):
     # We can fix this in the future maybe
     assert len(prog['functions']) == 1
 
-    """
-    Implements to ssa.
+    # Insert a new entry label to make sure that we can use phi statements
+    func = prog['functions'][0]
+    #for arg in func['args']:
+    #    name = arg['name']
+    #    func['instrs'].insert(0, {
+    #        'op': 'id', 'args': [name], 'type': arg['type'], 'dest': name
+    #    })
+    entry_label = 'b0'
+    arg_name = f"{func['name']}.arg"
+    if 'label' not in func['instrs'][0]:
+        func['instrs'].insert(0, {'label': entry_label})
 
-    It is intended to handle programs consisting of a single function, but
-    unfortunately accepts a single program as an argument.
-    """
-    """
-    Converting to SSA
-
-    To convert to SSA, we want to insert ϕ-nodes whenever there are distinct paths containing distinct definitions of a variable. We don’t need ϕ-nodes in places that are dominated by a definition of the variable. So what’s a way to know when control reachable from a definition is not dominated by that definition? The dominance frontier!
-
-    We do it in two steps. First, insert ϕ-nodes:
-
-    for v in vars:
-       for d in Defs[v]:  # Blocks where v is assigned.
-         for block in DF[d]:  # Dominance frontier.
-           Add a ϕ-node to block,
-             unless we have done so already.
-           Add block to Defs[v] (because it now writes to v!),
-             unless it's already in there.
-    """
     blocks, successors = cfg.make_cfg(prog)
     assert 'entry' in blocks
     dom = dominators.make_dominators(successors)
     dom_tree = dominators.dominance_tree(dom)
+    frontier = dominators.dominance_frontier(successors, dom)
     reach_in, _ = data_flow.run_worklist_algorithm(
         prog, data_flow.REACHABILITY, print_output=False
     )
-    debug_print(f"Reaching defs: {reach_in}")
-    defined_variables = get_defined_variables(blocks)
-    debug_print(f"Defined variables: {defined_variables}")
-    used_variables = get_used_variables(blocks)
     var_types = get_var_types(prog)
+    variable_definitions = get_defs(blocks)
+    debug_print(f"Reachable: {reach_in}")
 
-    # First, construct all the phi nodes from our reachability definitiong
-    named_phi_defs = {}
-    phi_def_names = {}
-    for block_name, reaching_defs in reach_in.items():
-        named_phi_defs[block_name] = {}
-        phi_def_names[block_name] = {}
-        for var in defined_variables[block_name] | used_variables[block_name]:
-            if var in reaching_defs:
-                reaching_defs[var] -= {block_name}
-            if var in reaching_defs and len(reaching_defs[var]) > 1:
-                named_phi_defs[block_name][var] = {}
-                phi_def_names[block_name][var] = None
-                for in_block in reaching_defs[var]:
-                    named_phi_defs[block_name][var][in_block] = None
-    debug_print(f"Reaching defs: {reach_in}")
-    debug_print(f"phi_def_names: {phi_def_names}")
+    # First, construct all the phi nodes
+    named_phi_defs = defaultdict(lambda : {})
+    phi_def_names = defaultdict(lambda : {})
+    for var, definitions in variable_definitions.items():
+        for block_name in definitions:
+            for frontier_block in frontier[block_name]:
+                if var not in named_phi_defs[frontier_block]:
+                    in_blocks = reach_in[frontier_block][var] - {frontier_block}
+                    if len(in_blocks) > 1:
+                        named_phi_defs[frontier_block][var] = {}
+                        phi_def_names[frontier_block][var] = None
+                        if frontier_block not in definitions:
+                            definitions.append(frontier_block)
+                        for in_block in in_blocks:
+                            var_name = None
+                            def_block = in_block
+                            if in_block == arg_name:
+                                var_name = var
+                                def_block = entry_label
+                            named_phi_defs[frontier_block][var][def_block] = var_name
+    debug_print(f"Phi definitions: {dict(named_phi_defs)}")
+    debug_print(f"Phi def destinations: {dict(phi_def_names)}")
+
+    var_name_stack = defaultdict(lambda : [])
+    var_def_count = defaultdict(lambda : 0)
+    if 'args' in func:
+        for arg in func['args']:
+            var_name_stack[arg['name']].append(arg['name'])
+
     """
-    stack[v] is a stack of variable names (for every variable v)
-
     def rename(block):
       for instr in block:
         replace each argument to instr with stack[old name]
-
+    
         replace instr's destination with a new name
         push that new name onto stack[old name]
-
+    
       for s in block's successors:
         for p in s's ϕ-nodes:
           Assuming p is for a variable v, make it read from stack[v].
-
+    
       for b in blocks immediately dominated by block:
         # That is, children in the dominance tree.
         rename(b)
-
+    
       pop all the names we just pushed onto the stacks
-
+    
     rename(entry)
     """
-    var_name_stack = defaultdict(lambda : [])
-    var_def_count = defaultdict(lambda : 0)
-
     def rename(block_name):
         var_name_depths = dict(
             (key, len(value)) for key, value in var_name_stack.items()
@@ -198,8 +181,8 @@ def to_ssa(prog):
             for label, var_name in named_defs.items():
                 labels.append(label)
                 names.append(var_name)
-                #debug_print(f"{block_name, var, named_defs, reach_in[block_name]}")
-                #assert var_name is not None
+                debug_print(f"{block_name}.{var}: {var_name} for {label}")
+                assert var_name is not None
             instr = {
                 'op': 'phi',
                 'type': var_types[var],
@@ -256,20 +239,3 @@ def route_commands():
 
 if __name__ == "__main__":
     route_commands()
-
-    blah = [
-    {"label": "entry"},
-    {"dest": "i.0", "op": "const", "type": "int", "value": 1},
-    {"labels": ["loop"], "op": "jmp"},
-    {"label": "loop"},
-    {"op": "phi", "type": "int", "dest": "i.1", "args": ["i.2", "i.0"], "labels": ["body", "entry"]},
-    {"dest": "max.0", "op": "const", "type": "int", "value": 10},
-    {"args": ["i.1", "max.0"], "dest": "cond.0", "op": "lt", "type": "bool"},
-    {"args": ["cond.0"], "labels": ["body", "exit"], "op": "br"},
-    {"label": "body"},
-    {"args": ["i.1", "i.1"], "dest": "i.2", "op": "add", "type": "int"},
-    {"labels": ["loop"], "op": "jmp"},
-    {"label": "exit"},
-    {"op": "phi", "type": "int", "dest": "i.3", "args": [null, null], "labels": ["body", "entry"]},
-    {"args": ["i.3"], "op": "print"}
-]
