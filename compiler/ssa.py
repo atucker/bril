@@ -53,6 +53,8 @@ def to_ssa(prog):
     arg_name = f"{func['name']}.arg"
     if 'label' not in func['instrs'][0]:
         func['instrs'].insert(0, {'label': entry_label})
+    else:
+        entry_label = func['instrs'][0]['label']
 
     blocks, successors = cfg.make_cfg(prog)
     assert 'entry' in blocks
@@ -74,7 +76,7 @@ def to_ssa(prog):
             for frontier_block in frontier[block_name]:
                 if var not in named_phi_defs[frontier_block]:
                     in_blocks = reach_in[frontier_block][var] - {frontier_block}
-                    if len(in_blocks) > 1:
+                    if len(in_blocks) > 0:
                         named_phi_defs[frontier_block][var] = {}
                         phi_def_names[frontier_block][var] = None
                         if frontier_block not in definitions:
@@ -86,6 +88,9 @@ def to_ssa(prog):
                                 var_name = var
                                 def_block = entry_label
                             named_phi_defs[frontier_block][var][def_block] = var_name
+                        if len(in_blocks) == 1:
+                            if entry_label not in named_phi_defs[frontier_block][var]:
+                                named_phi_defs[frontier_block][var][entry_label] = "__undefined"
     debug_print(f"Phi definitions: {dict(named_phi_defs)}")
     debug_print(f"Phi def destinations: {dict(phi_def_names)}")
 
