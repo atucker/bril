@@ -85,11 +85,15 @@ def add_cfg_prints(named_blocks):
         block.insert(idx, print_instrs[0])
 
 
+def func_prefix(func, prog):
+    return f"{func['name']}." if len(prog['functions']) > 1 else ''
+
+
 def make_cfg(prog):
     cfg = OrderedDict()
     named_blocks = OrderedDict()
     for func in prog['functions']:
-        func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
+        func_name = func_prefix(func, prog)
         func_blocks, func_cfg = make_func_cfg(func, func_name)
         for key, value in func_cfg.items():
             cfg[key] = value

@@ -78,7 +78,7 @@ def run_worklist_algorithm(prog, spec, print_output=True):
     blocks = OrderedDict()
 
     for func in prog['functions']:
-        func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
+        func_name = cfg.func_prefix(func, prog)
         func_in, func_out, func_blocks = func_run_worklist_algorithm(func, spec, func_name)
         block_in.update(func_in)
         block_out.update(func_out)
