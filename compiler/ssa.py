@@ -38,10 +38,7 @@ def get_var_types(prog):
     return var_types
 
 
-def to_ssa(prog):
-    # We can fix this in the future maybe
-    assert len(prog['functions']) == 1
-
+def func_to_ssa(func):
     # Insert a new entry label to make sure that we can use phi statements
     func = prog['functions'][0]
     #for arg in func['args']:
