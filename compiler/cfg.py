@@ -68,7 +68,7 @@ def make_func_cfg(func, func_name=''):
             else:
                 cfg[name] = []
 
-    return cfg, named_blocks
+    return named_blocks, cfg
 
 
 def add_cfg_prints(named_blocks):
@@ -90,7 +90,7 @@ def make_cfg(prog):
     named_blocks = OrderedDict()
     for func in prog['functions']:
         func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
-        func_cfg, func_blocks = make_func_cfg(func, func_name)
+        func_blocks, func_cfg = make_func_cfg(func, func_name)
         for key, value in func_cfg.items():
             cfg[key] = value
         for key, value in func_blocks.items():
@@ -102,7 +102,7 @@ def make_cfg(prog):
 def annotate_program(prog):
     for func in prog['functions']:
         func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
-        _, blocks = make_func_cfg(func, func_name)
+        blocks, _ = make_func_cfg(func, func_name)
         add_cfg_prints(blocks)
         func['instrs'] = []
         for _, block in blocks.items():

@@ -6,7 +6,7 @@ import data_flow
 from collections import defaultdict
 
 
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(s):

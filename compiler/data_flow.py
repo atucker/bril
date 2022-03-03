@@ -40,11 +40,11 @@ def get_used(instrs):
     return used
 
 
-def run_worklist_algorithm(prog, spec, print_output=True):
-    blocks, successors = cfg.make_cfg(prog)
+def func_run_worklist_algorithm(func, spec, func_name):
+    blocks, successors = cfg.make_func_cfg(func, func_name)
     predecessors = cfg.get_predecessors(successors)
 
-    block_in, block_out = spec.init(prog, blocks)
+    block_in, block_out = spec.init(func, blocks, func_name)
 
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
@@ -70,6 +70,20 @@ def run_worklist_algorithm(prog, spec, print_output=True):
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
 
+    return block_in, block_out, blocks
+
+
+def run_worklist_algorithm(prog, spec, print_output=True):
+    block_in, block_out = {}, {}
+    blocks = OrderedDict()
+
+    for func in prog['functions']:
+        func_name = f"{func['name']}." if len(prog['functions']) > 1 else ''
+        func_in, func_out, func_blocks = func_run_worklist_algorithm(func, spec, func_name)
+        block_in.update(func_in)
+        block_out.update(func_out)
+        blocks.update(func_blocks)
+
     if print_output:
         for name in blocks.keys():
             print(f"{name}:")
@@ -79,22 +93,21 @@ def run_worklist_algorithm(prog, spec, print_output=True):
     return block_in, block_out
 
 
-def init_add_args_var_version_set(prog, blocks):
+def init_add_args_var_version_set(func, blocks, func_name):
     block_in = {}
     block_out = {}
     for name in blocks.keys():
         block_in[name] = {}
         block_out[name] = {}
 
-    for func in prog['functions']:
-        key = f"{func['name']}.entry"
-        if len(prog['functions']) == 1:
-            key = 'entry'
+    key = f"{func['name']}.entry"
+    if func_name == '':
+        key = 'entry'
 
-        block_in[key] = {}
-        if 'args' in func:
-            for arg in func['args']:
-                block_in[key][arg['name']] = {f"{func['name']}.arg"}
+    block_in[key] = {}
+    if 'args' in func:
+        for arg in func['args']:
+            block_in[key][arg['name']] = {f"{func['name']}.arg"}
 
     return block_in, block_out
 
@@ -143,7 +156,7 @@ def reachability_transfer(outpt, name, instrs):
     return outpt
 
 
-def init_var_set(prog, blocks):
+def init_var_set(prog, blocks, func_name):
     block_in = {}
     block_out = {}
     for name in blocks.keys():
