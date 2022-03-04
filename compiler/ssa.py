@@ -177,10 +177,12 @@ def func_to_ssa(func, func_prefix):
             labels = []
             names = []
             for label, var_name in named_defs.items():
+                if var_name is None:
+                    var_name = '__undefined'
                 labels.append(label)
                 names.append(var_name)
-                debug_print(f"{block_name}.{var}: {var_name} for {label}")
-                assert var_name is not None
+                debug_print(f"{block_name}/{var}: {var_name} for {label}")
+
             instr = {
                 'op': 'phi',
                 'dest': dest,
