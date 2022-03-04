@@ -31,10 +31,13 @@ def get_defs(named_blocks):
 def get_var_types(prog):
     # TODO: Handle args
     var_types = {}
-    for func in prog['functions']:
-        for instr in func['instrs']:
-            if 'dest' in instr:
-                var_types[instr['dest']] = instr['type']
+    for instr in func['instrs']:
+        if 'dest' in instr and 'type' in instr:
+            var_types[instr['dest']] = instr['type']
+    if 'args' in func:
+        for arg in func['args']:
+            if 'type' in arg:
+                var_types[arg['name']] = arg['type']
     return var_types
 
 
