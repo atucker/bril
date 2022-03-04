@@ -194,7 +194,8 @@ def func_to_ssa(func, func_prefix):
             idx = 0
             if instrs and 'label' in instrs[0]:
                 idx = 1
-            instrs.insert(idx, instr)
+            if dest is not None:
+                instrs.insert(idx, instr)
 
     func['instrs'] = []
     for _, block in blocks.items():
