@@ -68,22 +68,38 @@ def func_to_ssa(func, func_prefix):
         for block_name in definitions:
             for frontier_block in frontier[block_name]:
                 if var not in named_phi_defs[frontier_block]:
-                    in_blocks = reach_in[frontier_block][var] - {frontier_block}
+                    in_blocks = reach_in[frontier_block][var]# - {frontier_block}
                     if len(in_blocks) > 0:
                         named_phi_defs[frontier_block][var] = {}
                         phi_def_names[frontier_block][var] = None
                         if frontier_block not in definitions:
                             definitions.append(frontier_block)
-                        for in_block in in_blocks:
+                        debug_print(f"in_blocks for {var}: {in_blocks}")
+                        for in_block in in_blocks - {frontier_block}:
                             var_name = None
                             def_block = in_block
                             if in_block == arg_name:
                                 var_name = var
                                 def_block = entry_label
                             named_phi_defs[frontier_block][var][def_block] = var_name
-                        if len(in_blocks) == 1:
-                            if entry_label not in named_phi_defs[frontier_block][var]:
-                                named_phi_defs[frontier_block][var][entry_label] = "__undefined"
+                        # We need to add the successor for the frontier blocks
+                        if frontier_block in in_blocks:
+                            for succ in successors[frontier_block]:
+                                named_phi_defs[frontier_block][var][succ] = None
+                        #if len(in_blocks) == 1:
+                        #   if entry_label not in named_phi_defs[frontier_block][var]:
+                        #        named_phi_defs[frontier_block][var][entry_label] = "__undefined"
+
+    added_new_entry = False
+    new_entry_label = f'new_{entry_label}'
+    if entry_label in named_phi_defs:
+        for var, label_mapping in named_phi_defs[entry_label].items():
+            if entry_label in label_mapping:
+                if not added_new_entry:
+                    added_new_entry = True
+                del label_mapping[entry_label]
+                label_mapping[new_entry_label] = var
+
     debug_print(f"Phi definitions: {dict(named_phi_defs)}")
     debug_print(f"Phi def destinations: {dict(phi_def_names)}")
 
@@ -144,7 +160,8 @@ def func_to_ssa(func, func_prefix):
                 instr['dest'] = rename_var(instr['dest'])
 
         # Now, tell our successors' phi definitions about our new block names
-        for successor in successors[block_name]:
+        block_successors = list(successors[block_name])
+        for successor in block_successors:
             debug_print(f"{block_name}'s successor {successor}, {named_phi_defs[successor]}")
             debug_print(f"\t Vars: {named_phi_defs[successor]}")
             for var in named_phi_defs[successor]:
@@ -194,10 +211,12 @@ def func_to_ssa(func, func_prefix):
             idx = 0
             if instrs and 'label' in instrs[0]:
                 idx = 1
-            if dest is not None:
+            if dest is not None: #and len(names) > 1:
                 instrs.insert(idx, instr)
 
     func['instrs'] = []
+    if added_new_entry:
+        func['instrs'].append({'label': new_entry_label})
     for _, block in blocks.items():
         func['instrs'] += block
 
