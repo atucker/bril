@@ -40,12 +40,11 @@ def get_used(instrs):
     return used
 
 
-def run_worklist_algorithm(spec):
-    prog = json.load(sys.stdin)
-    blocks, successors = cfg.make_cfg(prog)
+def func_run_worklist_algorithm(func, spec, func_name):
+    blocks, successors = cfg.make_func_cfg(func, func_name)
     predecessors = cfg.get_predecessors(successors)
 
-    block_in, block_out = spec.init(prog, blocks)
+    block_in, block_out = spec.init(func, blocks, func_name)
 
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
@@ -71,28 +70,44 @@ def run_worklist_algorithm(spec):
     if spec.direction == BACKWARD:
         block_in, block_out = block_out, block_in
 
-    for name in blocks.keys():
-        print(f"{name}:")
-        print(f"  in:  {spec.stringify(block_in[name])}")
-        print(f"  out: {spec.stringify(block_out[name])}")
+    return block_in, block_out, blocks
 
 
-def init_add_args_var_version_set(prog, blocks):
+def run_worklist_algorithm(prog, spec, print_output=True):
+    block_in, block_out = {}, {}
+    blocks = OrderedDict()
+
+    for func in prog['functions']:
+        func_name = cfg.func_prefix(func, prog)
+        func_in, func_out, func_blocks = func_run_worklist_algorithm(func, spec, func_name)
+        block_in.update(func_in)
+        block_out.update(func_out)
+        blocks.update(func_blocks)
+
+    if print_output:
+        for name in blocks.keys():
+            print(f"{name}:")
+            print(f"  in:  {spec.stringify(block_in[name])}")
+            print(f"  out: {spec.stringify(block_out[name])}")
+
+    return block_in, block_out
+
+
+def init_add_args_var_version_set(func, blocks, func_name):
     block_in = {}
     block_out = {}
     for name in blocks.keys():
         block_in[name] = {}
         block_out[name] = {}
 
-    for func in prog['functions']:
-        key = f"{func['name']}.entry"
-        if len(prog['functions']) == 1:
-            key = 'entry'
+    key = f"{func['name']}.entry"
+    if func_name == '':
+        key = 'entry'
 
-        block_in[key] = {}
-        if 'args' in func:
-            for arg in func['args']:
-                block_in[key][arg['name']] = {f"{func['name']}.arg"}
+    block_in[key] = {}
+    if 'args' in func:
+        for arg in func['args']:
+            block_in[key][arg['name']] = {f"{func['name']}.arg"}
 
     return block_in, block_out
 
@@ -141,7 +156,7 @@ def reachability_transfer(outpt, name, instrs):
     return outpt
 
 
-def init_var_set(prog, blocks):
+def init_var_set(prog, blocks, func_name):
     block_in = {}
     block_out = {}
     for name in blocks.keys():
@@ -183,21 +198,25 @@ def live_transfer(outpt, name, instrs):
     return inpt | used
 
 
+REACHABILITY = Spec(
+    direction=FORWARD,
+    init=init_add_args_var_version_set,
+    merge=merge_var_version_set,
+    transfer=reachability_transfer,
+    copy=copy_var_version_set,
+    stringify=stringify_var_version_set
+)
+
+
 def route_worklists():
     assert len(sys.argv) in {1, 2}
     mode = sys.argv[1]
     print(mode)
+    prog = json.load(sys.stdin)
     if mode == 'reachability':
-        run_worklist_algorithm(Spec(
-            direction=FORWARD,
-            init=init_add_args_var_version_set,
-            merge=merge_var_version_set,
-            transfer=reachability_transfer,
-            copy=copy_var_version_set,
-            stringify=stringify_var_version_set
-        ))
+        run_worklist_algorithm(prog, REACHABILITY)
     elif mode == 'live':
-        run_worklist_algorithm(Spec(
+        run_worklist_algorithm(prog, Spec(
             direction=BACKWARD,
             init=init_var_set,
             merge=merge_var_set,

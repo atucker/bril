@@ -46,7 +46,7 @@ def dominance_tree(dom):
                 # If you find a node which is dominated by your ancestors +
                 # itself, then you've found an immediate successor
                 if node != pred and dominated_by == {node} | ancestors:
-                    if node not in tree[pred]:
+                    if pred in tree and node not in tree[pred]:
                         tree[pred] = tree[pred] | {node}
                         changed = True
                     if node not in tree:
