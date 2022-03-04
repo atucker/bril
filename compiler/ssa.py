@@ -104,26 +104,6 @@ def func_to_ssa(func, func_prefix):
         for arg in func['args']:
             var_name_stack[arg['name']].append(arg['name'])
 
-    """
-    def rename(block):
-      for instr in block:
-        replace each argument to instr with stack[old name]
-    
-        replace instr's destination with a new name
-        push that new name onto stack[old name]
-    
-      for s in block's successors:
-        for p in s's ϕ-nodes:
-          Assuming p is for a variable v, make it read from stack[v].
-    
-      for b in blocks immediately dominated by block:
-        # That is, children in the dominance tree.
-        rename(b)
-    
-      pop all the names we just pushed onto the stacks
-    
-    rename(entry)
-    """
     def rename(block_name):
         var_name_depths = dict(
             (key, len(value)) for key, value in var_name_stack.items()
