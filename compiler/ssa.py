@@ -41,14 +41,8 @@ def get_var_types(prog):
     return var_types
 
 
-def func_to_ssa(func):
+def func_to_ssa(func, func_prefix):
     # Insert a new entry label to make sure that we can use phi statements
-    func = prog['functions'][0]
-    #for arg in func['args']:
-    #    name = arg['name']
-    #    func['instrs'].insert(0, {
-    #        'op': 'id', 'args': [name], 'type': arg['type'], 'dest': name
-    #    })
     entry_label = 'b0'
     arg_name = f"{func['name']}.arg"
     if 'label' not in func['instrs'][0]:
@@ -56,15 +50,15 @@ def func_to_ssa(func):
     else:
         entry_label = func['instrs'][0]['label']
 
-    blocks, successors = cfg.make_cfg(prog)
-    assert 'entry' in blocks
+    blocks, successors = cfg.make_func_cfg(func, func_prefix)
+    assert f'{func_prefix}entry' in blocks
     dom = dominators.make_dominators(successors)
     dom_tree = dominators.dominance_tree(dom)
     frontier = dominators.dominance_frontier(successors, dom)
-    reach_in, _ = data_flow.run_worklist_algorithm(
-        prog, data_flow.REACHABILITY, print_output=False
+    reach_in, _, _ = data_flow.func_run_worklist_algorithm(
+        func, data_flow.REACHABILITY, func_prefix
     )
-    var_types = get_var_types(prog)
+    var_types = get_var_types(func)
     variable_definitions = get_defs(blocks)
     debug_print(f"Reachable: {reach_in}")
 
@@ -176,7 +170,7 @@ def func_to_ssa(func):
             else:
                 assert len(var_name_stack[var]) == 0
 
-    rename('entry')
+    rename(f'{func_prefix}entry')
 
     for block_name, instrs in blocks.items():
         for var, named_defs in named_phi_defs[block_name].items():
@@ -200,12 +194,18 @@ def func_to_ssa(func):
                 idx = 1
             instrs.insert(idx, instr)
 
-    # put the program back together with phis
-    for func in prog['functions']:
-        func['instrs'] = []
-        for _, block in blocks.items():
-            func['instrs'] += block
+    func['instrs'] = []
+    for _, block in blocks.items():
+        func['instrs'] += block
 
+    return func
+
+
+def to_ssa(prog):
+    ssa_funcs = []
+    for func in prog['functions']:
+        ssa_funcs.append(func_to_ssa(func, cfg.func_prefix(func, prog)))
+    prog['functions'] = ssa_funcs
     return prog
 
 
