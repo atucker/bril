@@ -28,8 +28,7 @@ def get_defs(named_blocks):
     return defs
 
 
-def get_var_types(prog):
-    # TODO: Handle args
+def get_var_types(func):
     var_types = {}
     for instr in func['instrs']:
         if 'dest' in instr and 'type' in instr:
@@ -184,11 +183,12 @@ def func_to_ssa(func, func_prefix):
                 assert var_name is not None
             instr = {
                 'op': 'phi',
-                'type': var_types[var],
                 'dest': dest,
                 'args': names,
                 'labels': labels
             }
+            if var in var_types:
+                instr['type'] = var_types[var]
             idx = 0
             if instrs and 'label' in instrs[0]:
                 idx = 1
