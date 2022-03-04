@@ -206,7 +206,7 @@ def to_ssa(prog):
     return prog
 
 
-def from_ssa(prog):
+def func_from_ssa(func, func_prefix):
     """
     Eventually, we need to convert out of SSA form to generate efficient code
     for real machines that don’t have phi-nodes and do have finite space for
@@ -222,7 +222,68 @@ def from_ssa(prog):
     paths: one that does v = id x and one that does v = id y. Then you can
     delete the phi instruction.
     """
-    pass
+    blocks, successors = cfg.make_func_cfg(func, func_prefix)
+    ids_added = defaultdict(lambda : set())
+    id_instrs = defaultdict(lambda : [])
+    changed = True
+    while changed:
+        changed = False
+        for block, instrs in blocks.items():
+            for i, instr in enumerate(instrs):
+                if 'op' in instr and instr['op'] == 'phi':
+                    for name, label in zip(instr['args'], instr['labels']):
+                        assert label != block
+                        if name not in ids_added[label]:
+                            id_instr = {
+                                'op': 'id',
+                                'dest': instr['dest'],
+                                'args': [name]
+                            }
+                            if 'type' in instr:
+                                id_instr['type'] = instr['type']
+                            if name != '__undefined':
+                                id_instrs[label].append(id_instr)
+                            ids_added[label]  |= {name}
+                    del instrs[i]
+                    changed = True
+
+    # There has to be a better way to do this reordering, but whatever...
+    for block, new_instrs in id_instrs.items():
+        relevant = set([instr['dest'] for instr in new_instrs])
+        seen = set()
+        changed = True
+        while changed:
+            changed = False
+            debug_print(f"New instrs {new_instrs}")
+            for i, instr in enumerate(new_instrs):
+                seen |= {instr['dest']}
+                debug_print(f"\tSeen {seen}")
+                if instr['args'][0] in relevant - seen:
+                    seen -= {instr['dest']}
+                    del new_instrs[i]
+                    new_instrs.append(instr)
+                    changed = True
+                    break
+
+    for block, instrs in blocks.items():
+        for id_instr in id_instrs[block]:
+            if instrs and 'op' in instrs[-1] and instrs[-1]['op'] in {'jmp', 'br'}:
+                instrs.insert(-1, id_instr)
+            else:
+                instrs.append(id_instr)
+
+    func['instrs'] = []
+    for _, block in blocks.items():
+        func['instrs'] += block
+    return func
+
+
+def from_ssa(prog):
+    from_funcs = []
+    for func in prog['functions']:
+        from_funcs.append(func_from_ssa(func, cfg.func_prefix(func, prog)))
+    prog['functions'] = from_funcs
+    return prog
 
 
 def route_commands():
