@@ -148,7 +148,7 @@ def func_to_ssa(func, func_prefix):
             debug_print(f"{block_name}'s successor {successor}, {named_phi_defs[successor]}")
             debug_print(f"\t Vars: {named_phi_defs[successor]}")
             for var in named_phi_defs[successor]:
-                if block_name in named_phi_defs[successor][var]:
+                if block_name in named_phi_defs[successor][var] and var in var_name_stack:
                     new_name = var_name_stack[var][-1]
                     named_phi_defs[successor][var][block_name] = new_name
                     debug_print(f'{successor}: {var}/{block_name} -> {new_name}')
