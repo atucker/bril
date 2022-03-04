@@ -60,6 +60,11 @@ def func_to_ssa(func, func_prefix):
     var_types = get_var_types(func)
     variable_definitions = get_defs(blocks)
     debug_print(f"Reachable: {reach_in}")
+    debug_print(f"Frontier: {frontier}")
+
+    # If we're trying to talk about an argument in the entry block, fix it
+    added_new_entry = False
+    new_entry_label = f'new_{entry_label}'
 
     # First, construct all the phi nodes
     named_phi_defs = defaultdict(lambda : {})
@@ -81,24 +86,14 @@ def func_to_ssa(func, func_prefix):
                             if in_block == arg_name:
                                 var_name = var
                                 def_block = entry_label
+                                if frontier_block == entry_label:
+                                    added_new_entry = True
+                                    def_block = new_entry_label
                             named_phi_defs[frontier_block][var][def_block] = var_name
                         # We need to add the successor for the frontier blocks
                         if frontier_block in in_blocks:
                             for succ in successors[frontier_block]:
                                 named_phi_defs[frontier_block][var][succ] = None
-                        #if len(in_blocks) == 1:
-                        #   if entry_label not in named_phi_defs[frontier_block][var]:
-                        #        named_phi_defs[frontier_block][var][entry_label] = "__undefined"
-
-    added_new_entry = False
-    new_entry_label = f'new_{entry_label}'
-    if entry_label in named_phi_defs:
-        for var, label_mapping in named_phi_defs[entry_label].items():
-            if entry_label in label_mapping:
-                if not added_new_entry:
-                    added_new_entry = True
-                del label_mapping[entry_label]
-                label_mapping[new_entry_label] = var
 
     debug_print(f"Phi definitions: {dict(named_phi_defs)}")
     debug_print(f"Phi def destinations: {dict(phi_def_names)}")
