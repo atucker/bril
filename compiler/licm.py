@@ -83,6 +83,8 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
                 rename_labels(blocks[pred], header, f'{header}_preheader')
             instrs += preheaders[header]
             instrs += code
+        else:
+            instrs += code
     return instrs
 
 
