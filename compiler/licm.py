@@ -87,7 +87,6 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
 
 
 def find_loops(prog):
-    return prog
     for func in prog['functions']:
         blocks, predecessors, loops = find_loop_func(func)
         preheaders = {}
