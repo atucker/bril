@@ -45,11 +45,11 @@ def find_loop_func(func):
             if dominator in successors[node]:
                 if dominator not in possible_loops:
                     possible_loops[dominator] = set()
-                possible_loops |= {node}
+                possible_loops[dominator] |= {node}
 
     # Now find all the loops
     loops = []
-    for header, ends in possible_loops:
+    for header, ends in possible_loops.items():
         for end in ends:
             content = find_loop_content(header, end, predecessors, dom)
             if content is not None:
