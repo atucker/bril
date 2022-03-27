@@ -96,14 +96,15 @@ def rename_labels(instrs, rename_from, rename_to):
                 last_instr['labels'].append(label)
 
 
-def reconstitute_instrs(blocks, predecessors, preheaders):
+def reconstitute_instrs(blocks, predecessors, preheaders, loop):
     instrs = []
     for name, code in blocks.items():
         if name in preheaders:
             header = name
             # Rename predecessors' labels
             for pred in predecessors[header]:
-                rename_labels(blocks[pred], header, f'{header}_preheader')
+                if pred not in loop:
+                    rename_labels(blocks[pred], header, f'{header}_preheader')
             instrs += [{'label': f'{header}_preheader'}]
             instrs += preheaders[header]
             instrs += code
@@ -249,7 +250,7 @@ def find_loops(prog):
         for loop in loops:
             preheaders[loop['header']] = licm(blocks, analysis, loop)
         func['instrs'] = reconstitute_instrs(
-            blocks, analysis['predecessors'], preheaders
+            blocks, analysis['predecessors'], preheaders, loop['content']
         )
     return prog
 
