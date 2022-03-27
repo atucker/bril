@@ -44,7 +44,7 @@ def find_loop_func(func, analysis=None):
         analysis = {}
     blocks, predecessors, successors, dom = cache.func_ensure_analysis(
         func, analysis, [
-            cache.BLOCKS, cache.predecessors, cache.SUCCESSORS,  cache.DOM
+            cache.BLOCKS, cache.PREDECESSORS, cache.SUCCESSORS,  cache.DOM
         ]
     )
 
