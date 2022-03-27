@@ -4,6 +4,15 @@ import cfg
 import dominators
 import data_flow
 import cache
+from collections import defaultdict
+
+
+DEBUG = False
+
+
+def debug_msg(*args):
+    if DEBUG:
+        print(*args, file=sys.stderr)
 
 
 def find_loop_content(header, end, predecessors, dom):
@@ -76,7 +85,7 @@ def find_loop_func(func, analysis=None):
 
 def rename_labels(instrs, rename_from, rename_to):
     last_instr = instrs[-1]
-    debug_msg(f"last instr {last_instr}")
+    #debug_msg(f"last instr {last_instr}")
     if 'op' in last_instr and last_instr['op'] in {'jmp', 'br'}:
         labels = last_instr['labels']
         last_instr['labels'] = []
@@ -95,6 +104,7 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
             # Rename predecessors' labels
             for pred in predecessors[header]:
                 rename_labels(blocks[pred], header, f'{header}_preheader')
+            instrs += [{'label': f'{header}_preheader'}]
             instrs += preheaders[header]
             instrs += code
         else:
@@ -102,7 +112,7 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
     return instrs
 
 
-def licm(func, analysis, loop):
+def licm(blocks, analysis, loop):
     """
     Perform loop invariant code movement
 
@@ -110,6 +120,39 @@ def licm(func, analysis, loop):
     1) Returning a preheader with all the loop invariant code moved into it
     2) Mutating the blocks so that they don't have the loop invariant code
     """
+    assert 'reach' in analysis
+    assert 'dom' in analysis
+    assert cache.SUCCESSORS in analysis
+    block_in, block_out, _ = analysis['reach']
+    for node, vars in block_in.items():
+        for v, defs in vars.items():
+            vars[v] = set(defs)
+
+    # Do a quick usage analysis
+    uses = defaultdict(lambda : defaultdict(lambda : []))
+    for node, instrs in blocks.items():
+        for i, instr in enumerate(instrs):
+            if 'args' in instr:
+                for arg in instr['args']:
+                    uses[arg][node].append(i)
+
+    # Also do a quick definition analysis
+    defs = defaultdict(lambda : defaultdict(lambda : []))
+    for node, instrs in blocks.items():
+        for i, instr in enumerate(instrs):
+            if 'dest' in instr:
+                defs[instr['dest']][node].append(i)
+
+    loop_invariant_lines = defaultdict(lambda : set())
+    debug_instrs = []
+
+    # Figure out our loop exits...
+    exits = set()
+    successors = analysis[cache.SUCCESSORS]
+    for node in loop['content']:
+        if not set(successors[node]).issubset(loop['content']):
+            exits |= {node}
+
     """
     Finding LICM code:
     iterate to convergence:
@@ -118,18 +161,75 @@ def licm(func, analysis, loop):
             all reaching definitions of x are outside of the loop, or
             there is exactly one definition, and it is already marked as
                 loop invariant
-           
+    """
+    changed = True
+    while changed:
+        changed = False
+        for node, instrs in blocks.items():
+            if node in loop['content']:
+                for i, instr in enumerate(instrs):
+                    debug_msg(node, i, instr)
+                    line_is_loop_invariant = False
+                    if 'op' in instr and instr['op'] == 'const':
+                        line_is_loop_invariant = True
+                    elif 'args' in instr:
+                        # for all arguments in x
+                        for arg in instr['args']:
+                            if arg in block_in[node]:
+                                reaching_defs = block_in[node][arg]
+                            else:
+                                reaching_defs = {node}
+                            # exactly one definition
+                            if len(reaching_defs) == 1:
+                                (def_block,) =  reaching_defs
+                                if def_block in loop['content']:
+                                    arg_defs = defs[arg][def_block]
+                                    marked_li = loop_invariant_lines[def_block]
+                                    idx = max(arg_defs)
+                                    if def_block == node:
+                                        idx = max(d for d in arg_defs if d < i)
+                                    # and it is marked loop invariant
+                                    if idx not in marked_li:
+                                        break
+                            else:
+                                # All reaching definitions are outof the loop
+                                in_loop = [
+                                    d for d in reaching_defs
+                                    if d in loop['content']
+                                ]
+                                if in_loop:
+                                    debug_msg(f"Def of {arg} in loop {in_loop}")
+                                    break
+                        else: # runs only if we don't break out of loop
+                            line_is_loop_invariant = True
+                    if line_is_loop_invariant:
+                        if i not in loop_invariant_lines[node]:
+                            loop_invariant_lines[node] |= {i}
+                            debug_instrs.append((node, i, instr))
+                            changed = True
+                            debug_msg(f"Adding {(node, i)}: {instr} to loop invariant")
+
+    debug_msg(f"Loop invariant: {debug_instrs}")
+    preheader = []
+    """
     Safe to move to preheader if     
     1) The definition dominates all of its uses
     2) No other definitions of the same variable exist in the loop
     3) The instruction dominates all loop exits.
     """
-    block_in, block_out, _ = analysis['reach']
-    debug_msg("Reach!")
-    #debug_msg(block_in)
-    #debug_msg(block_out)
+    dom = analysis['dom']
+    for block, instrs in blocks.items():
+        for i, instr in enumerate(instrs):
+            if 'dest' in instr and i in loop_invariant_lines[block]:
+                var = instr['dest']
+                dom_uses = all(block in dom[node] for node in uses[var].keys())
+                no_other_defs = len(defs[var]) == 1
+                dom_exits = all(block in dom[node] for node in exits)
+                if dom_uses and no_other_defs  and dom_exits:
+                    del instrs[i]
+                    preheader.append(instr)
 
-    return []
+    return preheader
 
 
 def find_loops(prog):
@@ -161,4 +261,4 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         mode = sys.argv[1]
     if mode == 'find_loop':
-        print(json.dumps(find_loops(prog)))
+        print(json.dumps(find_loops(prog), indent=2))
