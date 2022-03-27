@@ -2,6 +2,8 @@ import sys
 import json
 import cfg
 import dominators
+import data_flow
+import cache
 
 
 def find_loop_content(header, end, predecessors, dom):
@@ -33,10 +35,14 @@ def find_loop_content(header, end, predecessors, dom):
     return contents
 
 
-def find_loop_func(func):
-    blocks, successors = cfg.make_func_cfg(func)
-    predecessors = cfg.get_predecessors(successors)
-    dom = dominators.make_dominators(successors)
+def find_loop_func(func, analysis=None):
+    if analysis is None:
+        analysis = {}
+    blocks, predecessors, successors, dom = cache.func_ensure_analysis(
+        func, analysis, [
+            cache.BLOCKS, cache.predecessors, cache.SUCCESSORS,  cache.DOM
+        ]
+    )
 
     # First, find all the backedges
     possible_loops = {}
@@ -58,7 +64,9 @@ def find_loop_func(func):
                     'end': end,
                     'content': content
                 })
-    return blocks, predecessors, loops
+
+    analysis['loops'] = loops
+    return blocks, analysis, loops
 
 
 def rename_labels(instrs, rename_from, rename_to):
@@ -88,13 +96,42 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
     return instrs
 
 
+def licm(func, analysis, loops):
+    """
+    Perform loop invariant code movement
+
+    We do this in two ways
+    1) Returning a preheader with all the loop invariant code moved into it
+    2) Mutating the blocks so that they don't have the loop invariant code
+    """
+    """
+    Finding LICM code:
+    iterate to convergence:
+    for every instruction in the loop:
+        mark it as LI iff, for all arguments x, either:
+            all reaching definitions of x are outside of the loop, or
+            there is exactly one definition, and it is already marked as
+                loop invariant
+           
+    Safe to move to preheader if     
+    1) The definition dominates all of its uses
+    2) No other definitions of the same variable exist in the loop
+    3) The instruction dominates all loop exits.
+    """
+    analysis['reach'] = reach = data_flow.func_reachability(func, analysis)
+    block_in, block_out = reach
+    return []
+
+
 def find_loops(prog):
     for func in prog['functions']:
-        blocks, predecessors, loops = find_loop_func(func)
+        blocks, analysis, loops = find_loop_func(func)
         preheaders = {}
         for loop in loops:
-            preheaders[loop['header']] = []
-        func['instrs'] = reconstitute_instrs(blocks, predecessors, preheaders)
+            preheaders[loop['header']] = licm(blocks, loops, analysis)
+        func['instrs'] = reconstitute_instrs(
+            blocks, analysis['predecessors'], preheaders
+        )
     return prog
 
 
