@@ -18,19 +18,23 @@ def find_loop_content(header, end, predecessors, dom):
         changed = False
         while len(worklist) > 0:
             node = worklist.pop()
+            #debug_msg(f"Checking node {node}")
             for pred in predecessors[node]:
-                if header not in dom[pred]:
-                    return None
-
-                if pred not in contents and pred != header:
-                    worklist.append(pred)
-                    contents |= {pred}
-                    changed = True
+                if node != header:
+                    if header not in dom[pred] :
+                        #debug_msg(f"Header {header} not dominating"
+                        #          f"predecessor {pred} of node {node}")
+                        return None
+                    elif pred not in contents and pred != header:
+                        #debug_msg(f"Adding predecessor {pred}")
+                        worklist.append(pred)
+                        contents |= {pred}
+                        changed = True
 
     # This checks that for every v in L,
     # either all the predecessors of v are in L or v=B
     for node in contents:
-        assert node == header or predecessors[node].issubset(contents)
+        assert node == header or set(predecessors[node]).issubset(contents)
 
     return contents
 
