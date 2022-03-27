@@ -18,7 +18,7 @@ def debug_msg(*args):
 def find_loop_content(header, end, predecessors, dom):
     # Get every predecessor to end which is dominated by the header,
     # and return None if we hit something not dominated by the header
-    contents = set(predecessors[end]) | {header, end}
+    contents = {header, end}
     worklist = list(contents)
 
     # Gradually building up a worklist gets us the smallest set
@@ -84,16 +84,17 @@ def find_loop_func(func, analysis=None):
 
 
 def rename_labels(instrs, rename_from, rename_to):
-    last_instr = instrs[-1]
-    #debug_msg(f"last instr {last_instr}")
-    if 'op' in last_instr and last_instr['op'] in {'jmp', 'br'}:
-        labels = last_instr['labels']
-        last_instr['labels'] = []
-        for label in labels:
-            if label == rename_from:
-                last_instr['labels'].append(rename_to)
-            else:
-                last_instr['labels'].append(label)
+    if instrs:
+        last_instr = instrs[-1]
+        #debug_msg(f"last instr {last_instr}")
+        if 'op' in last_instr and last_instr['op'] in {'jmp', 'br'}:
+            labels = last_instr['labels']
+            last_instr['labels'] = []
+            for label in labels:
+                if label == rename_from:
+                    last_instr['labels'].append(rename_to)
+                else:
+                    last_instr['labels'].append(label)
 
 
 def reconstitute_instrs(blocks, predecessors, preheaders, loop):
