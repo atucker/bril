@@ -203,6 +203,8 @@ def licm(blocks, analysis, loop):
                                     break
                         else: # runs only if we don't break out of loop
                             line_is_loop_invariant = True
+
+                    debug_msg(node, i, instr, line_is_loop_invariant)
                     if line_is_loop_invariant:
                         if i not in loop_invariant_lines[node]:
                             loop_invariant_lines[node] |= {i}
@@ -219,6 +221,7 @@ def licm(blocks, analysis, loop):
     3) The instruction dominates all loop exits.
     """
     dom = analysis['dom']
+    moved = defaultdict(lambda : [])
     for block, instrs in blocks.items():
         for i, instr in enumerate(instrs):
             if 'dest' in instr and i in loop_invariant_lines[block]:
@@ -226,9 +229,17 @@ def licm(blocks, analysis, loop):
                 dom_uses = all(block in dom[node] for node in uses[var].keys())
                 no_other_defs = len(defs[var]) == 1
                 dom_exits = all(block in dom[node] for node in exits)
+                debug_msg(f"Thinking of moving {(block, i)}: {instr}")
+                debug_msg(f"dom uses: {dom_uses}, other defs: {no_other_defs}, dom exits: {dom_exits}")
                 if dom_uses and no_other_defs  and dom_exits:
-                    del instrs[i]
+                    moved[block].append(i)
                     preheader.append(instr)
+
+    for block, instrs in blocks.items():
+        counter = 0
+        for i in moved[block]:
+            del instrs[i - counter]
+            counter += 1
 
     return preheader
 
