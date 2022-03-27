@@ -199,7 +199,7 @@ def licm(blocks, analysis, loop):
                                     # arg has definition from within loop
                                     break
                             else:
-                                reaching_defs = {node}
+                                arg_defs = defs[arg][node]
                                 arg_defs = [d for d in arg_defs if d < i]
                                 marked_li = loop_invariant_lines[node]
                                 if arg_defs and max(arg_defs) not in marked_li:
