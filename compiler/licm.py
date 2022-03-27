@@ -186,11 +186,17 @@ def licm(blocks, analysis, loop):
                                 if def_block in loop['content']:
                                     arg_defs = defs[arg][def_block]
                                     marked_li = loop_invariant_lines[def_block]
-                                    idx = max(arg_defs)
-                                    if def_block == node:
-                                        idx = max(d for d in arg_defs if d < i)
+
+                                    idx = None
+                                    try:
+                                        idx = max(arg_defs)
+                                        if def_block == node:
+                                            idx = max(d for d in arg_defs if d < i)
+                                    except ValueError:
+                                        pass
+
                                     # and it is marked loop invariant
-                                    if idx not in marked_li:
+                                    if idx is not None and idx not in marked_li:
                                         break
                             else:
                                 # All reaching definitions are outof the loop
