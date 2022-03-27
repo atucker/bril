@@ -147,11 +147,13 @@ def licm(blocks, analysis, loop):
     loop_invariant_lines = defaultdict(lambda : set())
     debug_instrs = []
 
+    loop = loop['content']
+
     # Figure out our loop exits...
     exits = set()
     successors = analysis[cache.SUCCESSORS]
-    for node in loop['content']:
-        if not set(successors[node]).issubset(loop['content']):
+    for node in loop:
+        if not set(successors[node]).issubset(loop):
             exits |= {node}
 
     """
@@ -163,11 +165,12 @@ def licm(blocks, analysis, loop):
             there is exactly one definition, and it is already marked as
                 loop invariant
     """
+
     changed = True
     while changed:
         changed = False
         for node, instrs in blocks.items():
-            if node in loop['content']:
+            if node in loop:
                 for i, instr in enumerate(instrs):
                     debug_msg(node, i, instr)
                     line_is_loop_invariant = False
@@ -183,7 +186,7 @@ def licm(blocks, analysis, loop):
                             # exactly one definition
                             if len(reaching_defs) == 1:
                                 (def_block,) =  reaching_defs
-                                if def_block in loop['content']:
+                                if def_block in loop:
                                     arg_defs = defs[arg][def_block]
                                     marked_li = loop_invariant_lines[def_block]
 
@@ -202,7 +205,7 @@ def licm(blocks, analysis, loop):
                                 # All reaching definitions are outof the loop
                                 in_loop = [
                                     d for d in reaching_defs
-                                    if d in loop['content']
+                                    if d in loop
                                 ]
                                 if in_loop:
                                     debug_msg(f"Def of {arg} in loop {in_loop}")
