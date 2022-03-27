@@ -5,6 +5,7 @@ import dominators
 import data_flow
 import cache
 from collections import defaultdict
+from functools import reduce
 
 
 DEBUG = False
@@ -148,8 +149,6 @@ def licm(blocks, analysis, loop):
     loop_invariant_lines = defaultdict(lambda : set())
     debug_instrs = []
 
-    loop = loop['content']
-
     # Figure out our loop exits...
     exits = set()
     successors = analysis[cache.SUCCESSORS]
@@ -183,6 +182,7 @@ def licm(blocks, analysis, loop):
                         for arg in instr['args']:
                             if arg in block_in[node]:
                                 reaching_defs = block_in[node][arg]
+                                debug_msg(f"{(node, i)}: {arg} reaching defs: {reaching_defs}")
                                 if len(reaching_defs) == 1:
                                     (def_block,) = reaching_defs
                                     if def_block in loop:
@@ -202,6 +202,7 @@ def licm(blocks, analysis, loop):
                             else:
                                 arg_defs = defs[arg][node]
                                 arg_defs = [d for d in arg_defs if d < i]
+                                debug_msg(f"{(node, i)}: {arg_defs} ")
                                 marked_li = loop_invariant_lines[node]
                                 if arg_defs and max(arg_defs) not in marked_li:
                                     # def is not marked loop invariant
@@ -252,6 +253,7 @@ def licm(blocks, analysis, loop):
 def find_loops(prog):
     for func in prog['functions']:
         blocks, analysis, loops = find_loop_func(func)
+        assert 'dom' in analysis
         debug_msg(f"Loops: {loops}")
         preheaders = {}
         analysis['reach'] = reach = data_flow.func_reachability(func, analysis)
@@ -263,11 +265,35 @@ def find_loops(prog):
         debug_msg(loops)
         debug_msg(analysis[cache.SUCCESSORS])
 
+        loops = [loop['content'] for loop in loops]
+
+        # Merge together all the loops with any overlap
+        changed = True
+        while changed:
+            changed = False
+            new_loops = []
+            for loop1 in loops:
+                new_loop1 = loop1
+                for loop2 in loops:
+                    if loop2 != loop1 and loop1 & loop2:
+                        new_loop1 |= loop2
+                        changed = True
+                new_loops.append(new_loop1)
+            loops = new_loops
+
+        dom = analysis['dom']
         for loop in loops:
-            preheaders[loop['header']] = licm(blocks, analysis, loop)
+            header = reduce(
+                lambda a, b: a & b,
+                [dom[block] for block in loop],
+                loop
+            )
+            assert len(header) == 1
+            (header,) = header
+            preheaders[header] = licm(blocks, analysis, loop)
 
             func['instrs'] = reconstitute_instrs(
-                blocks, analysis['predecessors'], preheaders, loop['content']
+                blocks, analysis['predecessors'], preheaders, loop
             )
     return prog
 
