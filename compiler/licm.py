@@ -176,39 +176,34 @@ def licm(blocks, analysis, loop):
                     line_is_loop_invariant = False
                     if 'op' in instr and instr['op'] == 'const':
                         line_is_loop_invariant = True
+
                     elif 'args' in instr:
                         # for all arguments in x
                         for arg in instr['args']:
                             if arg in block_in[node]:
                                 reaching_defs = block_in[node][arg]
+                                if len(reaching_defs) == 1:
+                                    (def_block,) = reaching_defs
+                                    if def_block in loop:
+                                        arg_defs = defs[arg][def_block]
+                                        marked_li = loop_invariant_lines[def_block]
+                                        if arg_defs:
+                                            if max(arg_defs) not in marked_li:
+                                                # def is not marked loop invariant
+                                                break
+                                    else:
+                                        # def_block not in loop -> defined out
+                                        # of loop, and therefore okay
+                                        pass
+                                elif any(d in loop for d in reaching_defs):
+                                    # arg has definition from within loop
+                                    break
                             else:
                                 reaching_defs = {node}
-                            # exactly one definition
-                            if len(reaching_defs) == 1:
-                                (def_block,) =  reaching_defs
-                                if def_block in loop:
-                                    arg_defs = defs[arg][def_block]
-                                    marked_li = loop_invariant_lines[def_block]
-
-                                    idx = None
-                                    try:
-                                        idx = max(arg_defs)
-                                        if def_block == node:
-                                            idx = max(d for d in arg_defs if d < i)
-                                    except ValueError:
-                                        pass
-
-                                    # and it is marked loop invariant
-                                    if idx is not None and idx not in marked_li:
-                                        break
-                            else:
-                                # All reaching definitions are outof the loop
-                                in_loop = [
-                                    d for d in reaching_defs
-                                    if d in loop
-                                ]
-                                if in_loop:
-                                    debug_msg(f"Def of {arg} in loop {in_loop}")
+                                arg_defs = [d for d in arg_defs if d < i]
+                                marked_li = loop_invariant_lines[node]
+                                if arg_defs and max(arg_defs) not in marked_li:
+                                    # def is not marked loop invariant
                                     break
                         else: # runs only if we don't break out of loop
                             line_is_loop_invariant = True
