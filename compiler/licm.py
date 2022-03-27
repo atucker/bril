@@ -102,7 +102,7 @@ def reconstitute_instrs(blocks, predecessors, preheaders):
     return instrs
 
 
-def licm(func, analysis, loops):
+def licm(func, analysis, loop):
     """
     Perform loop invariant code movement
 
@@ -124,17 +124,30 @@ def licm(func, analysis, loops):
     2) No other definitions of the same variable exist in the loop
     3) The instruction dominates all loop exits.
     """
-    analysis['reach'] = reach = data_flow.func_reachability(func, analysis)
-    block_in, block_out = reach
+    block_in, block_out, _ = analysis['reach']
+    debug_msg("Reach!")
+    #debug_msg(block_in)
+    #debug_msg(block_out)
+
     return []
 
 
 def find_loops(prog):
     for func in prog['functions']:
         blocks, analysis, loops = find_loop_func(func)
+        debug_msg(f"Loops: {loops}")
         preheaders = {}
+        analysis['reach'] = reach = data_flow.func_reachability(func, analysis)
+        block_in, block_out, _ = reach
+        for block, vars in block_in.items():
+            for var in vars.keys():
+                vars[var] = list(vars[var])
+
+        debug_msg(loops)
+        debug_msg(analysis[cache.SUCCESSORS])
+
         for loop in loops:
-            preheaders[loop['header']] = licm(blocks, loops, analysis)
+            preheaders[loop['header']] = licm(blocks, analysis, loop)
         func['instrs'] = reconstitute_instrs(
             blocks, analysis['predecessors'], preheaders
         )
