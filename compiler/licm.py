@@ -260,9 +260,10 @@ def find_loops(prog):
 
         for loop in loops:
             preheaders[loop['header']] = licm(blocks, analysis, loop)
-        func['instrs'] = reconstitute_instrs(
-            blocks, analysis['predecessors'], preheaders, loop['content']
-        )
+
+            func['instrs'] = reconstitute_instrs(
+                blocks, analysis['predecessors'], preheaders, loop['content']
+            )
     return prog
 
 
