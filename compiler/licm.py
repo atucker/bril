@@ -57,6 +57,7 @@ def find_loop_func(func, analysis=None):
                     possible_loops[dominator] = set()
                 possible_loops[dominator] |= {node}
 
+
     # Now find all the loops
     loops = []
     for header, ends in possible_loops.items():
@@ -75,14 +76,15 @@ def find_loop_func(func, analysis=None):
 
 def rename_labels(instrs, rename_from, rename_to):
     last_instr = instrs[-1]
+    debug_msg(f"last instr {last_instr}")
     if 'op' in last_instr and last_instr['op'] in {'jmp', 'br'}:
-        args = last_instr['args']
-        last_instr['args'] = []
-        for arg in args:
-            if arg == rename_from:
-                last_instr['args'].append(rename_to)
+        labels = last_instr['labels']
+        last_instr['labels'] = []
+        for label in labels:
+            if label == rename_from:
+                last_instr['labels'].append(rename_to)
             else:
-                last_instr['args'].append(arg)
+                last_instr['labels'].append(label)
 
 
 def reconstitute_instrs(blocks, predecessors, preheaders):
