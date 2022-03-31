@@ -110,19 +110,18 @@ export class Heap<X> {
 
 export class RefCounter {
   private readonly refcounts: Map<number, number>;
-  private readonly deadrefs: Map<number, number>;
+  private readonly deadrefs: Set<number>;
   private readonly heap: Heap<Value>;
 
   constructor(heap: Heap<Value>) {
     this.refcounts = new Map();
-    this.deadrefs = new Map();
+    this.deadrefs = new Set();
     this.heap = heap;
   }
 
   count(key: Key): number {
-    let count = this.refcounts.get(key.base);
-    let dead_count = this.deadrefs.get(key.base);
-    dead_count = dead_count ? dead_count : 0
+    let count = this.refcounts.get(key.base);;
+    let dead_count = this.deadrefs.has(key.base) ? 1 : 0
     count = count ? count : 0;
     return count + dead_count
   }
@@ -140,7 +139,7 @@ export class RefCounter {
       if (this.deadrefs.has(key.base)) {
         throw error(`maybe double freed pointer with base ${key.base}`);
       }
-      this.deadrefs.set(key.base, 1);
+      this.deadrefs.add(key.base);
     }
 
     if (this.count(key) == 0) {
