@@ -152,7 +152,6 @@ export class RefCounter {
     }
   }
 
-
   cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
       if (isPointer(value) && value != ret) {
@@ -163,6 +162,10 @@ export class RefCounter {
         }
       }
     });
+  }
+
+  has_deadref(key: Key): boolean {
+    return this.deadrefs.has(key.base)
   }
 }
 
@@ -513,7 +516,10 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     let val = getArgument(instr, state.env, 0);
     state.env.set(instr.dest, val);
     if (isPointer(val)) {
-      state.refcounter.increment((<Pointer>val).loc)
+      if (state.refcounter.has_deadref((<Pointer> val).loc)) {
+        throw error(`Tried to increment freed pointer ${instr.args![0]}`);
+      }
+      state.refcounter.increment((<Pointer> val).loc)
     }
     return NEXT;
   }
@@ -728,8 +734,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     let ptr = getPtr(instr, state.env, 0)
     let val = getInt(instr, state.env, 1)
 
-    let already_has_ptr = state.env.has(instr.dest);
+    if (state.refcounter.has_deadref(ptr.loc)) {
+      throw error(`Tried to increment freed pointer ${instr.args![0]}`);
+    }
 
+    let already_has_ptr = state.env.has(instr.dest);
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
 
     if (!already_has_ptr) {
