@@ -397,6 +397,9 @@ function evalCall(instr: bril.Operation, state: State): Action {
 
     // Set the value of the arg in the new (function) environment.
     newEnv.set(params[i].name, value);
+    if(isPointer(value)) {
+      state.refcounter.increment((<Pointer> value).loc)
+    }
   }
 
   // Invoke the interpreter on the function.
