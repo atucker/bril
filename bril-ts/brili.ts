@@ -131,10 +131,12 @@ export class RefCounter {
     }
   }
 
-  cleanup_environment(env: Env) {
+  cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
       if (typeCheck(value, {"ptr": "int"}) && value.hasOwnProperty("loc")) {
-        this.decrement((<Pointer>value).loc);
+        if (value != ret) {
+          this.decrement((<Pointer>value).loc);
+        }
       }
     });
   }
@@ -757,7 +759,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       // Take the prescribed action.
       switch (action.action) {
       case 'end': {
-        state.refcounter.cleanup_environment(state.env);
+        state.refcounter.cleanup_environment(state.env, action.ret);
         // Return from this function.
         return action.ret;
       }
