@@ -130,6 +130,14 @@ export class RefCounter {
       this.refcounts.delete(key.base);
     }
   }
+
+  cleanup_environment(env: Env) {
+    env.forEach((value: Value, key: bril.Ident) => {
+      if (typeCheck(value, {"ptr": "int"}) && value.hasOwnProperty("loc")) {
+        this.decrement((<Pointer>value).loc);
+      }
+    });
+  }
 }
 
 const argCounts: {[key in bril.OpCode]: number | null} = {
