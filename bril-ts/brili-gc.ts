@@ -522,7 +522,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     state.env.set(instr.dest, val);
     if (isPointer(val)) {
       if (state.refcounter.has_deadref((<Pointer> val).loc)) {
-        throw error(`Tried to increment freed pointer ${instr.args![0]}`);
+        throw error(`Tried to id freed pointer ${instr.args![0]}`);
       }
       state.refcounter.increment((<Pointer> val).loc)
     }
@@ -740,7 +740,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     let val = getInt(instr, state.env, 1)
 
     if (state.refcounter.has_deadref(ptr.loc)) {
-      throw error(`Tried to increment freed pointer ${instr.args![0]}`);
+      throw error(`Tried to ptradd freed pointer ${instr.args![0]}`);
     }
 
     let already_has_ptr = state.env.has(instr.dest);
