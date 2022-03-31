@@ -120,10 +120,13 @@ export class RefCounter {
     this.refcounts.set(key.base, this.count(key) + 1);
   }
 
-  decrement(key: Key) {
+  decrement(key: Key, deletion_handled: boolean=false) {
     this.refcounts.set(key.base, this.count(key) - 1);
+
     if (this.count(key) == 0) {
-      this.heap.free(key);
+      if (!deletion_handled){
+        this.heap.free(key);
+      }
       this.refcounts.delete(key.base);
     }
   }
@@ -647,6 +650,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`cannot allocate non-pointer type ${instr.type}`);
     }
     let ptr = alloc(typ, Number(amt), state.heap);
+    state.refcounter.increment(ptr.loc);
     state.env.set(instr.dest, ptr);
     return NEXT;
   }
@@ -654,6 +658,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "free": {
     let val = getPtr(instr, state.env, 0);
     state.heap.free(val.loc);
+    state.refcounter.decrement(val.loc,true);
     return NEXT;
   }
 
@@ -744,6 +749,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       // Take the prescribed action.
       switch (action.action) {
       case 'end': {
+        state.refcounter.cleanup_environment(state.env);
         // Return from this function.
         return action.ret;
       }
@@ -869,7 +875,7 @@ function evalProg(prog: bril.Program) {
   let state: State = {
     funcs: prog.functions,
     heap,
-    refcounter,
+    refcounter: refcounter,
     env: newEnv,
     icount: BigInt(0),
     lastlabel: null,
