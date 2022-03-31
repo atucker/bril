@@ -707,7 +707,17 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "ptradd": {
     let ptr = getPtr(instr, state.env, 0)
     let val = getInt(instr, state.env, 1)
+
+    let already_has_ptr = state.env.has(instr.dest);
+
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
+
+    if (!already_has_ptr) {
+      // only increment if the variable was undeclared, otherwise we should
+      // increment and decrement which cancel out
+      state.refcounter.increment(ptr.loc);
+    }
+
     return NEXT;
   }
 
