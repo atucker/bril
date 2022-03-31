@@ -110,40 +110,58 @@ export class Heap<X> {
 
 export class RefCounter {
   private readonly refcounts: Map<number, number>;
+  private readonly deadrefs: Map<number, number>;
   private readonly heap: Heap<Value>;
 
   constructor(heap: Heap<Value>) {
-    this.refcounts= new Map();
+    this.refcounts = new Map();
+    this.deadrefs = new Map();
     this.heap = heap;
   }
 
   count(key: Key): number {
     let count = this.refcounts.get(key.base);
+    let dead_count = this.deadrefs.get(key.base);
+    dead_count = dead_count ? dead_count : 0
     count = count ? count : 0;
-    return count
+    return count + dead_count
   }
 
   increment(key: Key) {
     this.refcounts.set(key.base, this.count(key) + 1);
+    console.error(`Incrementing ${key.base} to ${this.count(key)}`);
   }
 
-  decrement(key: Key, deletion_handled: boolean=false) {
+  decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
     this.refcounts.set(key.base, this.count(key) - 1);
+    console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+
+    if (deletion_handled) {
+      if (this.deadrefs.has(key.base)) {
+        throw error(`maybe double freed pointer with base ${key.base}`);
+      }
+      this.deadrefs.set(key.base, 1);
+    }
 
     if (this.count(key) == 0) {
       if (!deletion_handled){
         let key_base = new Key(key.base, 0);
         // need to free w/ offset 0
-        this.heap.free(key_base);
+        //this.heap.free(key_base);
       }
       this.refcounts.delete(key.base);
     }
   }
 
+
   cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
       if (isPointer(value) && value != ret) {
-        this.decrement((<Pointer>value).loc);
+        let key = (<Pointer> value).loc
+        this.decrement(key, false, "cleanup");
+        if (this.deadrefs.has(key.base)) {
+          this.deadrefs.delete(key.base);
+        }
       }
     });
   }
