@@ -327,6 +327,7 @@ let NEXT: Action = {"action": "next"};
 type State = {
   env: Env,
   readonly heap: Heap<Value>,
+  readonly refcounter: RefCounter,
   readonly funcs: readonly bril.Function[],
 
   // For profiling: a total count of the number of instructions executed.
@@ -379,6 +380,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     heap: state.heap,
     funcs: state.funcs,
     icount: state.icount,
+    refcounter: state.refcounter,
     lastlabel: null,
     curlabel: null,
     specparent: null,  // Speculation not allowed.
@@ -843,7 +845,8 @@ function parseMainArguments(expected: bril.Argument[], args: string[]) : Env {
 }
 
 function evalProg(prog: bril.Program) {
-  let heap = new Heap<Value>()
+  let heap = new Heap<Value>();
+  let refcounter = new RefCounter(heap);
   let main = findFunc("main", prog.functions);
   if (main === null) {
     console.warn(`no main function defined, doing nothing`);
@@ -866,6 +869,7 @@ function evalProg(prog: bril.Program) {
   let state: State = {
     funcs: prog.functions,
     heap,
+    refcounter,
     env: newEnv,
     icount: BigInt(0),
     lastlabel: null,
