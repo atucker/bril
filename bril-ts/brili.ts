@@ -824,6 +824,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
   if (state.specparent) {
     throw error(`implicit return in speculative state`);
   }
+  state.refcounter.cleanup_environment(state.env, null);
   return null;
 }
 
