@@ -128,12 +128,11 @@ export class RefCounter {
 
   increment(key: Key) {
     this.refcounts.set(key.base, this.count(key) + 1);
-    console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    //console.error(`Incrementing ${key.base} to ${this.count(key)}`);
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
     this.refcounts.set(key.base, this.count(key) - 1);
-    console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
 
     if (deletion_handled) {
       if (this.deadrefs.has(key.base)) {
