@@ -327,9 +327,9 @@
   call @matmul size arr1 arr1_transposed hermitian;
   call @cholesky size hermitian res;
   call @printarray sqsize res;
-  free arr1;
-  free arr1_transposed;
-  free hermitian;
-  free res;
+#  free arr1;
+#  free arr1_transposed;
+#  free hermitian;
+#  free res;
   ret;
 }

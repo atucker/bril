@@ -6,7 +6,7 @@
   site: ptr<int> = alloc n;
   result: int = call @queen zero n icount site;
   print result;
-  free site;
+#  free site;
 }
 @queen(n: int, queens: int, icount: int, site: ptr<int>): int {
   one: int = const 1;

@@ -94,5 +94,5 @@ sizei: int = sub size one;
 # Print array
     call @print_array array size;
 
-    free array;
+#    free array;
 }

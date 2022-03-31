@@ -4,7 +4,7 @@
   call @fill_array arr size;
   checksum: int = call @adler32 arr size;
   print checksum;
-  free arr;
+#  free arr;
 }
 
 # Calculate the modulo of the two numbers using arithmetic

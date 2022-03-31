@@ -29,6 +29,6 @@
   last: ptr<int> = ptradd vals i_minus_one;
   tmp: int = load last;
   print tmp;
-  free vals;
+#  free vals;
   ret;
 }

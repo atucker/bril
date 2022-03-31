@@ -150,9 +150,9 @@
   call @printarray num_nodes csr_offset;
   call @printarray num_edges csr_edges;
 
-  free adjmat;
-  free csr_offset;
-  free csr_edges;
-  free rng;
+#  free adjmat;
+#  free csr_offset;
+#  free csr_edges;
+#  free rng;
   ret;
 }
