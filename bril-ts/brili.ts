@@ -125,7 +125,9 @@ export class RefCounter {
 
     if (this.count(key) == 0) {
       if (!deletion_handled){
-        this.heap.free(key);
+        let key_base = new Key(key.base, 0);
+        // need to free w/ offset 0
+        this.heap.free(key_base);
       }
       this.refcounts.delete(key.base);
     }
