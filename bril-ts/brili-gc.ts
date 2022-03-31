@@ -519,12 +519,21 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   case "id": {
     let val = getArgument(instr, state.env, 0);
+    let old_val = state.env.get(instr.dest);
+
     state.env.set(instr.dest, val);
     if (isPointer(val)) {
       if (state.refcounter.has_deadref((<Pointer> val).loc)) {
         throw error(`Tried to id freed pointer ${instr.args![0]}`);
       }
       state.refcounter.increment((<Pointer> val).loc)
+      if (typeof old_val !== 'undefined'){
+        // has to come after
+        // - if you do it before, then might hit 0 when it should end up at 1
+        // - if you only increment if not defined, then we don't handle setting
+        //   one pointer variable to a different pointer correctly
+        state.refcounter.decrement((<Pointer> old_val).loc);
+      }
     }
     return NEXT;
   }
