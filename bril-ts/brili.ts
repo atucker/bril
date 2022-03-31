@@ -99,6 +99,13 @@ export class Heap<X> {
             throw error(`Uninitialized heap location ${key.base} and/or illegal offset ${key.offset}`);
         }
     }
+
+    log_heap() {
+        console.error("Heap");
+        this.storage.forEach( (value: X[], key: number) => {
+            console.error(`${key}: ${value}`);
+        });
+    }
 }
 
 export class RefCounter {
@@ -909,6 +916,7 @@ function evalProg(prog: bril.Program) {
 
   if (profiling) {
     console.error(`total_dyn_inst: ${state.icount}`);
+    state.heap.log_heap();
   }
 
 }
