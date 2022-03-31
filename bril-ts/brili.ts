@@ -101,6 +101,34 @@ export class Heap<X> {
     }
 }
 
+export class RefCounter {
+  private readonly refcounts: Map<number, number>;
+  private readonly heap: Heap<Value>;
+
+  constructor(heap: Heap<Value>) {
+    this.refcounts= new Map();
+    this.heap = heap;
+  }
+
+  count(key: Key): number {
+    let count = this.refcounts.get(key.base);
+    count = count ? count : 0;
+    return count
+  }
+
+  increment(key: Key) {
+    this.refcounts.set(key.base, this.count(key) + 1);
+  }
+
+  decrement(key: Key) {
+    this.refcounts.set(key.base, this.count(key) - 1);
+    if (this.count(key) == 0) {
+      this.heap.free(key);
+      this.refcounts.delete(key.base);
+    }
+  }
+}
+
 const argCounts: {[key in bril.OpCode]: number | null} = {
   add: 2,
   mul: 2,
