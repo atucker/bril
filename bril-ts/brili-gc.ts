@@ -686,7 +686,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "free": {
     let val = getPtr(instr, state.env, 0);
     state.heap.free(val.loc);
-    state.refcounter.decrement(val.loc,true);
+    state.refcounter.decrement(val.loc,true, "free");
     return NEXT;
   }
 
