@@ -135,10 +135,8 @@ export class RefCounter {
 
   cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
-      if (typeCheck(value, {"ptr": "int"}) && value.hasOwnProperty("loc")) {
-        if (value != ret) {
-          this.decrement((<Pointer>value).loc);
-        }
+      if (isPointer(value) && value != ret) {
+        this.decrement((<Pointer>value).loc);
       }
     });
   }
@@ -206,6 +204,11 @@ function typeCheck(val: Value, typ: bril.Type): boolean {
     return val.hasOwnProperty("loc");
   }
   throw error(`unknown type ${typ}`);
+}
+
+
+function isPointer(val: Value): boolean {
+  return val.hasOwnProperty("loc");
 }
 
 /**
