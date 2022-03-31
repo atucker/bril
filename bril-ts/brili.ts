@@ -909,14 +909,14 @@ function evalProg(prog: bril.Program) {
     specparent: null,
   }
   evalFunc(main, state);
-
+  
   if (!heap.isEmpty()) {
+    state.heap.log_heap();
     throw error(`Some memory locations have not been freed by end of execution.`);
   }
 
   if (profiling) {
     console.error(`total_dyn_inst: ${state.icount}`);
-    state.heap.log_heap();
   }
 
 }
