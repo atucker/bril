@@ -265,7 +265,6 @@ def find_loops(prog):
         debug_msg(loops)
         debug_msg(analysis[cache.SUCCESSORS])
 
-        loops = [loop['content'] for loop in loops]
 
         # Merge together all the loops with any overlap
         changed = True
@@ -275,22 +274,15 @@ def find_loops(prog):
             for loop1 in loops:
                 new_loop1 = loop1
                 for loop2 in loops:
-                    if loop2 != loop1 and loop1 & loop2:
-                        new_loop1 |= loop2
+                    if loop2 != loop1 and loop1['content'] & loop2['content']\
+                            and loop1['header'] == loop2['header']:
+                        new_loop1['content'] |= loop2['content']
                         changed = True
                 new_loops.append(new_loop1)
             loops = new_loops
 
-        dom = analysis['dom']
         for loop in loops:
-            header = reduce(
-                lambda a, b: a & b,
-                [dom[block] for block in loop],
-                loop
-            )
-            assert len(header) == 1
-            (header,) = header
-            preheaders[header] = licm(blocks, analysis, loop)
+            preheaders[loop['header']] = licm(blocks, analysis, loop['content'])
 
             func['instrs'] = reconstitute_instrs(
                 blocks, analysis['predecessors'], preheaders, loop
