@@ -142,12 +142,16 @@ export class RefCounter {
       this.deadrefs.add(key.base);
     }
 
+    //console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+
+    if (!deletion_handled){ this.free_if_norefs(key); }
+  }
+
+  free_if_norefs(key: Key) {
     if (this.count(key) == 0) {
-      if (!deletion_handled){
-        let key_base = new Key(key.base, 0);
-        // need to free w/ offset 0
-        //this.heap.free(key_base);
-      }
+      // need to free w/ offset 0
+      let key_base = new Key(key.base, 0);
+      this.heap.free(key_base);
       this.refcounts.delete(key.base);
     }
   }
@@ -156,9 +160,11 @@ export class RefCounter {
     env.forEach((value: Value, key: bril.Ident) => {
       if (isPointer(value) && value != ret) {
         let key = (<Pointer> value).loc
-        this.decrement(key, false, "cleanup");
         if (this.deadrefs.has(key.base)) {
           this.deadrefs.delete(key.base);
+          this.free_if_norefs(key);
+        } else {
+          this.decrement(key, false, "cleanup");
         }
       }
     });
