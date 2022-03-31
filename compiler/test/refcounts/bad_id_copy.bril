@@ -1,3 +1,4 @@
+# RETURN: 2
 @main() {
   size: int = const 10;
   vals: ptr<int> = alloc size;
