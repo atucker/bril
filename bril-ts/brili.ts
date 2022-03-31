@@ -485,6 +485,9 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "id": {
     let val = getArgument(instr, state.env, 0);
     state.env.set(instr.dest, val);
+    if (isPointer(val)) {
+      state.refcounter.increment((<Pointer>val).loc)
+    }
     return NEXT;
   }
 
