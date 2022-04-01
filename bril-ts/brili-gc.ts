@@ -78,7 +78,11 @@ export class Heap<X> {
             this.freeKey(key);
             this.storage.delete(key.base);
         } else {
-            throw error(`Tried to free illegal memory location base: ${key.base}, offset: ${key.offset}. Offset must be 0.`);
+            if (!this.storage.has(key.base)) {
+              throw error(`Tried to free illegal memory location base: ${key.base}. Base not found.`)
+            } else {
+              throw error(`Tried to free illegal memory location base: ${key.base}, offset: ${key.offset}. Offset must be 0.`);
+            }
         }
     }
 
@@ -119,20 +123,27 @@ export class RefCounter {
     this.heap = heap;
   }
 
-  count(key: Key): number {
-    let count = this.refcounts.get(key.base);;
-    let dead_count = this.deadrefs.has(key.base) ? 1 : 0
+  count(key: Key, deadcount=true): number {
+    let count = this.refcounts.get(key.base);
     count = count ? count : 0;
+    let dead_count = this.deadrefs.has(key.base) && deadcount ? 1 : 0;
     return count + dead_count
   }
 
-  increment(key: Key) {
+  increment(key: Key, old_value: Pointer | undefined=undefined) {
     this.refcounts.set(key.base, this.count(key) + 1);
-    //console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    if (typeof old_value !== 'undefined'){
+        // has to come after
+        // - if you do it before, then might hit 0 when it should end up at 1
+        // - if you only increment if not defined, then we don't handle setting
+        //   one pointer variable to a different pointer correctly
+        this.decrement(old_value.loc, false, "overwriting");
+    }
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
-    this.refcounts.set(key.base, this.count(key) - 1);
+    this.refcounts.set(key.base, this.count(key, false) - 1);
 
     if (deletion_handled) {
       if (this.deadrefs.has(key.base)) {
@@ -141,7 +152,7 @@ export class RefCounter {
       this.deadrefs.add(key.base);
     }
 
-    //console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+    console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}, deadcount=${this.deadrefs.has(key.base) ? 1 : 0}`);
 
     if (!deletion_handled){ this.free_if_norefs(key); }
   }
@@ -158,10 +169,9 @@ export class RefCounter {
   cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
       if (isPointer(value) && value != ret) {
-        let key = (<Pointer> value).loc
-        if (this.deadrefs.has(key.base)) {
+        let key = (<Pointer> value).loc;
+        if (this.deadrefs.has(key.base) && this.count(key) == 1) {
           this.deadrefs.delete(key.base);
-          this.free_if_norefs(key);
         } else {
           this.decrement(key, false, "cleanup");
         }
@@ -519,12 +529,17 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   case "id": {
     let val = getArgument(instr, state.env, 0);
+    let old_value = state.env.get(instr.dest);
+
     state.env.set(instr.dest, val);
     if (isPointer(val)) {
       if (state.refcounter.has_deadref((<Pointer> val).loc)) {
         throw error(`Tried to id freed pointer ${instr.args![0]}`);
       }
-      state.refcounter.increment((<Pointer> val).loc)
+      state.refcounter.increment(
+          (<Pointer> val).loc,
+          <Pointer | undefined> old_value
+      );
     }
     return NEXT;
   }
@@ -706,7 +721,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`cannot allocate non-pointer type ${instr.type}`);
     }
     let ptr = alloc(typ, Number(amt), state.heap);
-    state.refcounter.increment(ptr.loc);
+    let old_value = state.env.get(instr.dest);
+    state.refcounter.increment(
+        (<Pointer> ptr).loc,
+        <Pointer | undefined> old_value
+    );
     state.env.set(instr.dest, ptr);
     return NEXT;
   }
@@ -743,14 +762,14 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`Tried to ptradd freed pointer ${instr.args![0]}`);
     }
 
-    let already_has_ptr = state.env.has(instr.dest);
+    let old_value = state.env.get(instr.dest);
+
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
 
-    if (!already_has_ptr) {
-      // only increment if the variable was undeclared, otherwise we should
-      // increment and decrement which cancel out
-      state.refcounter.increment(ptr.loc);
-    }
+    state.refcounter.increment(
+        (<Pointer> ptr).loc,
+        <Pointer | undefined> old_value
+    );
 
     return NEXT;
   }

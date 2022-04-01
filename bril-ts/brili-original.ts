@@ -99,79 +99,6 @@ export class Heap<X> {
             throw error(`Uninitialized heap location ${key.base} and/or illegal offset ${key.offset}`);
         }
     }
-
-    log_heap() {
-        console.error("Heap");
-        this.storage.forEach( (value: X[], key: number) => {
-            console.error(`${key}: ${value}`);
-        });
-    }
-}
-
-export class RefCounter {
-  private readonly refcounts: Map<number, number>;
-  private readonly deadrefs: Set<number>;
-  private readonly heap: Heap<Value>;
-
-  constructor(heap: Heap<Value>) {
-    this.refcounts = new Map();
-    this.deadrefs = new Set();
-    this.heap = heap;
-  }
-
-  count(key: Key): number {
-    let count = this.refcounts.get(key.base);;
-    let dead_count = this.deadrefs.has(key.base) ? 1 : 0
-    count = count ? count : 0;
-    return count + dead_count
-  }
-
-  increment(key: Key) {
-    this.refcounts.set(key.base, this.count(key) + 1);
-    //console.error(`Incrementing ${key.base} to ${this.count(key)}`);
-  }
-
-  decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
-    this.refcounts.set(key.base, this.count(key) - 1);
-
-    if (deletion_handled) {
-      if (this.deadrefs.has(key.base)) {
-        throw error(`maybe double freed pointer with base ${key.base}`);
-      }
-      this.deadrefs.add(key.base);
-    }
-
-    //console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
-
-    if (!deletion_handled){ this.free_if_norefs(key); }
-  }
-
-  free_if_norefs(key: Key) {
-    if (this.count(key) == 0) {
-      // need to free w/ offset 0
-      let key_base = new Key(key.base, 0);
-      this.heap.free(key_base);
-      this.refcounts.delete(key.base);
-    }
-  }
-
-  cleanup_environment(env: Env, ret: Value | null) {
-    env.forEach((value: Value, key: bril.Ident) => {
-      if (isPointer(value) && value != ret) {
-        let key = (<Pointer> value).loc
-        if (this.deadrefs.has(key.base)) {
-          this.deadrefs.delete(key.base);
-          this.free_if_norefs(key);
-        } else {
-          this.decrement(key, false, "cleanup");
-        }
-      }
-    });
-  }
-
-  has_deadref(key: Key): boolean {
-    return this.deadrefs.has(key.base)
-  }
 }
 
 const argCounts: {[key in bril.OpCode]: number | null} = {
@@ -236,11 +163,6 @@ function typeCheck(val: Value, typ: bril.Type): boolean {
     return val.hasOwnProperty("loc");
   }
   throw error(`unknown type ${typ}`);
-}
-
-
-function isPointer(val: Value): boolean {
-  return val.hasOwnProperty("loc");
 }
 
 /**
@@ -377,7 +299,6 @@ let NEXT: Action = {"action": "next"};
 type State = {
   env: Env,
   readonly heap: Heap<Value>,
-  readonly refcounter: RefCounter,
   readonly funcs: readonly bril.Function[],
 
   // For profiling: a total count of the number of instructions executed.
@@ -422,9 +343,6 @@ function evalCall(instr: bril.Operation, state: State): Action {
 
     // Set the value of the arg in the new (function) environment.
     newEnv.set(params[i].name, value);
-    if(isPointer(value)) {
-      state.refcounter.increment((<Pointer> value).loc)
-    }
   }
 
   // Invoke the interpreter on the function.
@@ -433,7 +351,6 @@ function evalCall(instr: bril.Operation, state: State): Action {
     heap: state.heap,
     funcs: state.funcs,
     icount: state.icount,
-    refcounter: state.refcounter,
     lastlabel: null,
     curlabel: null,
     specparent: null,  // Speculation not allowed.
@@ -520,12 +437,6 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "id": {
     let val = getArgument(instr, state.env, 0);
     state.env.set(instr.dest, val);
-    if (isPointer(val)) {
-      if (state.refcounter.has_deadref((<Pointer> val).loc)) {
-        throw error(`Tried to id freed pointer ${instr.args![0]}`);
-      }
-      state.refcounter.increment((<Pointer> val).loc)
-    }
     return NEXT;
   }
 
@@ -706,7 +617,6 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`cannot allocate non-pointer type ${instr.type}`);
     }
     let ptr = alloc(typ, Number(amt), state.heap);
-    state.refcounter.increment(ptr.loc);
     state.env.set(instr.dest, ptr);
     return NEXT;
   }
@@ -714,7 +624,6 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "free": {
     let val = getPtr(instr, state.env, 0);
     state.heap.free(val.loc);
-    state.refcounter.decrement(val.loc,true, "free");
     return NEXT;
   }
 
@@ -738,20 +647,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "ptradd": {
     let ptr = getPtr(instr, state.env, 0)
     let val = getInt(instr, state.env, 1)
-
-    if (state.refcounter.has_deadref(ptr.loc)) {
-      throw error(`Tried to ptradd freed pointer ${instr.args![0]}`);
-    }
-
-    let already_has_ptr = state.env.has(instr.dest);
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
-
-    if (!already_has_ptr) {
-      // only increment if the variable was undeclared, otherwise we should
-      // increment and decrement which cancel out
-      state.refcounter.increment(ptr.loc);
-    }
-
     return NEXT;
   }
 
@@ -818,7 +714,6 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       // Take the prescribed action.
       switch (action.action) {
       case 'end': {
-        state.refcounter.cleanup_environment(state.env, action.ret);
         // Return from this function.
         return action.ret;
       }
@@ -883,7 +778,6 @@ function evalFunc(func: bril.Function, state: State): Value | null {
   if (state.specparent) {
     throw error(`implicit return in speculative state`);
   }
-  state.refcounter.cleanup_environment(state.env, null);
   return null;
 }
 
@@ -921,8 +815,7 @@ function parseMainArguments(expected: bril.Argument[], args: string[]) : Env {
 }
 
 function evalProg(prog: bril.Program) {
-  let heap = new Heap<Value>();
-  let refcounter = new RefCounter(heap);
+  let heap = new Heap<Value>()
   let main = findFunc("main", prog.functions);
   if (main === null) {
     console.warn(`no main function defined, doing nothing`);
@@ -945,7 +838,6 @@ function evalProg(prog: bril.Program) {
   let state: State = {
     funcs: prog.functions,
     heap,
-    refcounter: refcounter,
     env: newEnv,
     icount: BigInt(0),
     lastlabel: null,
@@ -953,9 +845,8 @@ function evalProg(prog: bril.Program) {
     specparent: null,
   }
   evalFunc(main, state);
-  
+
   if (!heap.isEmpty()) {
-    state.heap.log_heap();
     throw error(`Some memory locations have not been freed by end of execution.`);
   }
 
