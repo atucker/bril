@@ -78,7 +78,11 @@ export class Heap<X> {
             this.freeKey(key);
             this.storage.delete(key.base);
         } else {
-            throw error(`Tried to free illegal memory location base: ${key.base}, offset: ${key.offset}. Offset must be 0.`);
+            if (!this.storage.has(key.base)) {
+              throw error(`Tried to free illegal memory location base: ${key.base}. Base not found.`)
+            } else {
+              throw error(`Tried to free illegal memory location base: ${key.base}, offset: ${key.offset}. Offset must be 0.`);
+            }
         }
     }
 
