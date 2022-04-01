@@ -1,0 +1,6 @@
+@main() {
+  size: int = const 10;  
+  vals: ptr<int> = alloc size;
+  vals: ptr<int> = alloc size;
+  ret;
+}

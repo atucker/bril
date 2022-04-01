@@ -1,0 +1,7 @@
+@main() {
+  size: int = const 10;  
+  vals: ptr<int> = alloc size;
+  new_vals: ptr<int> = alloc size;
+  vals: ptr<int> = id new_vals;
+  ret;
+}

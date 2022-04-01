@@ -752,13 +752,17 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`Tried to ptradd freed pointer ${instr.args![0]}`);
     }
 
-    let already_has_ptr = state.env.has(instr.dest);
-    state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
+    let old_value = state.env.get(instr.dest);
 
-    if (!already_has_ptr) {
-      // only increment if the variable was undeclared, otherwise we should
-      // increment and decrement which cancel out
-      state.refcounter.increment(ptr.loc);
+    state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
+    g
+    state.refcounter.increment(ptr.loc);
+    if (typeof old_value !== 'undefined'){
+      // has to come after
+      // - if you do it before, then might hit 0 when it should end up at 1
+      // - if you only increment if not defined, then we don't handle setting
+      //   one pointer variable to a different pointer correctly
+      state.refcounter.decrement((<Pointer> old_value).loc);
     }
 
     return NEXT;
