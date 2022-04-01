@@ -130,9 +130,16 @@ export class RefCounter {
     return count + dead_count
   }
 
-  increment(key: Key) {
+  increment(key: Key, old_value: Pointer | undefined=undefined) {
     this.refcounts.set(key.base, this.count(key) + 1);
-    //console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    if (typeof old_value !== 'undefined'){
+        // has to come after
+        // - if you do it before, then might hit 0 when it should end up at 1
+        // - if you only increment if not defined, then we don't handle setting
+        //   one pointer variable to a different pointer correctly
+        this.decrement(old_value.loc, false, "overwriting");
+    }
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
@@ -523,21 +530,17 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   case "id": {
     let val = getArgument(instr, state.env, 0);
-    let old_val = state.env.get(instr.dest);
+    let old_value = state.env.get(instr.dest);
 
     state.env.set(instr.dest, val);
     if (isPointer(val)) {
       if (state.refcounter.has_deadref((<Pointer> val).loc)) {
         throw error(`Tried to id freed pointer ${instr.args![0]}`);
       }
-      state.refcounter.increment((<Pointer> val).loc)
-      if (typeof old_val !== 'undefined'){
-        // has to come after
-        // - if you do it before, then might hit 0 when it should end up at 1
-        // - if you only increment if not defined, then we don't handle setting
-        //   one pointer variable to a different pointer correctly
-        state.refcounter.decrement((<Pointer> old_val).loc);
-      }
+      state.refcounter.increment(
+          (<Pointer> val).loc,
+          <Pointer | undefined> old_value
+      );
     }
     return NEXT;
   }
@@ -719,7 +722,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
       throw error(`cannot allocate non-pointer type ${instr.type}`);
     }
     let ptr = alloc(typ, Number(amt), state.heap);
-    state.refcounter.increment(ptr.loc);
+    let old_value = state.env.get(instr.dest);
+    state.refcounter.increment(
+        (<Pointer> ptr).loc,
+        <Pointer | undefined> old_value
+    );
     state.env.set(instr.dest, ptr);
     return NEXT;
   }
@@ -759,15 +766,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     let old_value = state.env.get(instr.dest);
 
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
-    g
-    state.refcounter.increment(ptr.loc);
-    if (typeof old_value !== 'undefined'){
-      // has to come after
-      // - if you do it before, then might hit 0 when it should end up at 1
-      // - if you only increment if not defined, then we don't handle setting
-      //   one pointer variable to a different pointer correctly
-      state.refcounter.decrement((<Pointer> old_value).loc);
-    }
+
+    state.refcounter.increment(
+        (<Pointer> ptr).loc,
+        <Pointer | undefined> old_value
+    );
 
     return NEXT;
   }
