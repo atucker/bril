@@ -123,10 +123,10 @@ export class RefCounter {
     this.heap = heap;
   }
 
-  count(key: Key): number {
-    let count = this.refcounts.get(key.base);;
-    let dead_count = this.deadrefs.has(key.base) ? 1 : 0
+  count(key: Key, deadcount=true): number {
+    let count = this.refcounts.get(key.base);
     count = count ? count : 0;
+    let dead_count = this.deadrefs.has(key.base) && deadcount ? 1 : 0;
     return count + dead_count
   }
 
@@ -143,7 +143,7 @@ export class RefCounter {
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
-    this.refcounts.set(key.base, this.count(key) - 1);
+    this.refcounts.set(key.base, this.count(key, false) - 1);
 
     if (deletion_handled) {
       if (this.deadrefs.has(key.base)) {
@@ -152,7 +152,7 @@ export class RefCounter {
       this.deadrefs.add(key.base);
     }
 
-    //console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+    console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}, deadcount=${this.deadrefs.has(key.base) ? 1 : 0}`);
 
     if (!deletion_handled){ this.free_if_norefs(key); }
   }
@@ -169,10 +169,9 @@ export class RefCounter {
   cleanup_environment(env: Env, ret: Value | null) {
     env.forEach((value: Value, key: bril.Ident) => {
       if (isPointer(value) && value != ret) {
-        let key = (<Pointer> value).loc
-        if (this.deadrefs.has(key.base)) {
+        let key = (<Pointer> value).loc;
+        if (this.deadrefs.has(key.base) && this.count(key) == 1) {
           this.deadrefs.delete(key.base);
-          this.free_if_norefs(key);
         } else {
           this.decrement(key, false, "cleanup");
         }
