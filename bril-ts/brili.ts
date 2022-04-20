@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import * as bril from './bril';
-import {readStdin, unreachable} from './util';
+import {readStdin, readSocket, unreachable} from './util';
+import {ChildProcess, ExecException} from "child_process";
+const { spawn } = require('child_process');
 
 /**
  * An interpreter error to print to the console.
@@ -18,6 +20,23 @@ class BriliError extends Error {
  */
 function error(message: string): BriliError {
   return new BriliError(message);
+}
+
+/**
+ * A function to call python code
+ */
+async function callPython(prog: string, inpt: string, args?: Array<string>): Promise<string> {
+  let spawn_args: Array<string> = [prog];
+  if (args) {
+    spawn_args = spawn_args.concat(args);
+  }
+  console.log(`Running ${prog}, sending ${inpt} with args ${spawn_args}`);
+  let python = spawn('python', spawn_args);
+
+  python.stdin.write(inpt);
+  python.stdin.end();
+
+  return JSON.parse(await readSocket(python.stdout));
 }
 
 /**

@@ -1,10 +1,17 @@
+import {Stream} from "stream";
+import Socket = NodeJS.Socket;
+
 /**
  * Read all the data from stdin as a string.
  */
 export function readStdin(): Promise<string> {
+  return readSocket(process.stdin);
+}
+
+export function readSocket(socket: Socket): Promise<string> {
   return new Promise((resolve, reject) => {
     let chunks: string[] = [];
-    process.stdin.on("data", function (chunk: string) {
+    socket.on("data", function (chunk: string) {
       chunks.push(chunk);
     }).on("end", function () {
       resolve(chunks.join(""))
