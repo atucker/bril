@@ -481,6 +481,8 @@ function evalCall(instr: bril.Operation, state: State): Action {
     blocks: state.blocks,
     instrs: state.instrs,
   }
+
+  // Don't need to update func since we send over a new state
   let retVal = evalFunc(func, newState);
   state.icount = newState.icount;
 
