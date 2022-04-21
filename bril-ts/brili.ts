@@ -475,17 +475,14 @@ function evalCall(instr: bril.Operation, state: State): Action {
     specparent: null,  // Speculation not allowed.
 
     dom: state.dom,
-    tracing: state.tracing,
+    tracing: false,
     curfunc: func,
-    blocks: state.blocks,
-    instrs: state.instrs,
+    blocks: [],
+    instrs: [],
   }
 
   // Don't need to update func since we send over a new state
   let retVal = evalFunc(func, newState);
-  if (state.tracing) {
-    state.blocks.push(blockName(state));
-  }
   state.icount = newState.icount;
 
   // Dynamically check the function's return value and type.
@@ -860,9 +857,6 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
 
 function evalFunc(func: bril.Function, state: State): Value | null {
-  if (state.tracing) {
-    state.blocks.push(blockName(state));
-  }
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
     if ('op' in line) {
