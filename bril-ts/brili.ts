@@ -40,6 +40,19 @@ async function callPython(prog: string, inpt: string, args?: Array<string>): Pro
 }
 
 /**
+ * Name the basic block based on the current state
+ * This mirrors compilers/cfg.func_prefix
+ */
+function block_name(state: State): string {
+  let prefix = '';
+  if (state.funcs.length > 1 && state.curfunc && state.curfunc.name) {
+    prefix = `${state.curfunc.name}.`;
+  }
+  let label = state.curlabel || 'entry';
+  return `${prefix}${label}`;
+}
+
+/**
  * An abstract key class used to access the heap.
  * This allows for "pointer arithmetic" on keys,
  * while still allowing lookups based on the based pointer of each allocation.
@@ -402,12 +415,18 @@ type State = {
   // For profiling: a total count of the number of instructions executed.
   icount: bigint,
 
-  // For SSA (phi-node) execution: keep track of recently-seen labels.j
+  // For SSA (phi-node) execution: keep track of recently-seen labels.
   curlabel: string | null,
   lastlabel: string | null,
 
   // For speculation: the state at the point where speculation began.
   specparent: State | null,
+
+  // For tracing:
+  tracing: boolean,
+  curfunc: bril.Function, // current function
+  blocks: string[] | null, // blocks traversed
+  instrs: bril.Instruction[],
 }
 
 /**
@@ -456,6 +475,11 @@ function evalCall(instr: bril.Operation, state: State): Action {
     lastlabel: null,
     curlabel: null,
     specparent: null,  // Speculation not allowed.
+
+    tracing: state.tracing,
+    curfunc: func,
+    blocks: state.blocks,
+    instrs: state.instrs,
   }
   let retVal = evalFunc(func, newState);
   state.icount = newState.icount;
@@ -970,6 +994,11 @@ function evalProg(prog: bril.Program) {
     lastlabel: null,
     curlabel: null,
     specparent: null,
+
+    tracing: false,
+    curfunc: main,
+    blocks: [],
+    instrs: []
   }
   evalFunc(main, state);
   
