@@ -622,9 +622,6 @@ function evalCall(instr: bril.Operation, state: State): Action {
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
   state.icount += BigInt(1);
-  if (state.tracing) {
-    state.instrs.push(instr);
-  }
 
   // Check that we have the right number of arguments.
   if (instr.op !== "const") {
@@ -928,11 +925,13 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Begin speculation.
   case "speculate": {
+    if (state.tracing) {finalizeTrace(state);}
     return {"action": "speculate"};
   }
 
   // Abort speculation if the condition is false.
   case "guard": {
+    if (state.tracing) {error(`tracing during guard for state ${state}`)}
     if (getBool(instr, state.env, 0)) {
       return NEXT;
     } else {
@@ -942,6 +941,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Resolve speculation, making speculative state real.
   case "commit": {
+    if (state.tracing) {error(`tracing during commit for state ${state}`)}
     return {"action": "commit"};
   }
 
@@ -952,8 +952,12 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
 
 function evalFunc(func: bril.Function, state: State): Value | null {
+  state.curlabel = 'entry';
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
+    if (state.tracing && line) {
+      state.instrs.push(line);
+    }
     if ('op' in line) {
       // Run an instruction.
       let action = evalInstr(line, state);
