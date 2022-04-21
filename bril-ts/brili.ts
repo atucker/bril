@@ -861,6 +861,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   }
 
   case "call": {
+    if (state.tracing) {
+      debugMessage(`Hit call, so finalizing`);
+      state.instrs.pop();
+      finalizeTrace(state);
+    }
     return evalCall(instr, state);
   }
 
