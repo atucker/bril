@@ -453,18 +453,29 @@ function transcribeTrace(
  * Finalize the trace
  */
 function finalizeTrace(state: State): void {
-  debugMessage(state.instrs);
-  if (!state.curlabel) { throw error("State had no current label, malformed"); return;}
-  if (!state.trace_start) { throw error("State had no trace start, malformed"); return;}
-  if (!state.curfunc) { throw error("State had no current function, malformed");}
-  if (state.curlabel != state.trace_start) { throw error("Traced a non-loop, malformed");}
-
-
   let start = state.trace_start;
-  let end   = state.curlabel;
+  let end   = blockName(state);
+  debugMessage(`Traced ${start} -> ${end}, along ${state.blocks}`);
+  debugMessage(state.instrs);
+
+  if (!end) { throw error("State had no current label, malformed");}
+  if (!start) { throw error("State had no trace start, malformed");}
+  if (!state.curfunc) { throw error("State had no current function, malformed");}
+  if (start != end) { throw error("Traced a non-loop, malformed");}
+  if (!state.instrs) {
+    debugMessage(`Trace had no instructions, so just resetting`);
+    resetTrace(state);
+    return;
+  }
+
+  start = start.split(".").slice(1).join(".");
+  end   = end.split(".").slice(1).join(".");
+
   let skip_postfix = `${state.curfunc.instrs.length}`;
   let newinstrs = new Array<(Instruction | Label)>();
-  let straightlineinstrs = transcribeTrace(start, end, skip_postfix, state.instrs);
+  let straightlineinstrs = transcribeTrace(
+      start, end, skip_postfix, state.instrs
+  );
   debugMessage(`Made ${straightlineinstrs.length} new instrs ${JSON.stringify(straightlineinstrs)}`);
   let spliced = false;
   state.curfunc.instrs.forEach((instr) => {
