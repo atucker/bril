@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import * as bril from './bril';
-import {readStdin, readSocket, unreachable} from './util';
+import {readStdin, callPython, unreachable} from './util';
 import {ChildProcess, ExecException} from "child_process";
-const { spawn } = require('child_process');
 
 /**
  * An interpreter error to print to the console.
@@ -20,36 +19,6 @@ class BriliError extends Error {
  */
 function error(message: string): BriliError {
   return new BriliError(message);
-}
-
-/**
- * A function to call python code
- */
-async function callPython(prog: string, inpt: string, args?: Array<string>): Promise<string> {
-  let spawn_args: Array<string> = [prog];
-  if (args) {
-    spawn_args = spawn_args.concat(args);
-  }
-  console.log(`Running ${prog}, sending ${inpt} with args ${spawn_args}`);
-  let python = spawn('python', spawn_args);
-
-  python.stdin.write(inpt);
-  python.stdin.end();
-
-  return JSON.parse(await readSocket(python.stdout));
-}
-
-/**
- * Name the basic block based on the current state
- * This mirrors compilers/cfg.func_prefix
- */
-function blockName(state: State): string {
-  let prefix = '';
-  if (state.funcs.length > 1 && state.curfunc && state.curfunc.name) {
-    prefix = `${state.curfunc.name}.`;
-  }
-  let label = state.curlabel || 'entry';
-  return `${prefix}${label}`;
 }
 
 /**
@@ -388,6 +357,34 @@ function getFunc(instr: bril.Operation, index: number): bril.Ident {
     throw error(`expecting ${index+1} functions; found ${instr.funcs.length}`);
   }
   return instr.funcs[index];
+}
+
+/**
+ * Name the basic block based on the current state
+ * This mirrors compilers/cfg.func_prefix
+ */
+function blockName(state: State): string {
+  let prefix = '';
+  if (state.funcs.length > 1 && state.curfunc && state.curfunc.name) {
+    prefix = `${state.curfunc.name}.`;
+  }
+  let label = state.curlabel || 'entry';
+  return `${prefix}${label}`;
+}
+
+/**
+ * Fix the dom to be Map<string, Set<string>>, not Map<string, string[]>
+ */
+function domToSet(dom: Map<string, string[]>) {
+  let ans = new Map<string, Set<string>>();
+  dom.forEach((setlist: string[], key: string) => {
+    let set = new Set<string>();
+    setlist.forEach((value) => {
+      set.add(value);
+    })
+    ans.set(key, set);
+  });
+  return ans;
 }
 
 /**
