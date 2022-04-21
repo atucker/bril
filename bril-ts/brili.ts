@@ -43,7 +43,7 @@ async function callPython(prog: string, inpt: string, args?: Array<string>): Pro
  * Name the basic block based on the current state
  * This mirrors compilers/cfg.func_prefix
  */
-function block_name(state: State): string {
+function blockName(state: State): string {
   let prefix = '';
   if (state.funcs.length > 1 && state.curfunc && state.curfunc.name) {
     prefix = `${state.curfunc.name}.`;
@@ -425,7 +425,7 @@ type State = {
   // For tracing:
   tracing: boolean,
   curfunc: bril.Function, // current function
-  blocks: string[] | null, // blocks traversed
+  blocks: string[], // blocks traversed
   instrs: bril.Instruction[],
 }
 
@@ -528,6 +528,9 @@ function evalCall(instr: bril.Operation, state: State): Action {
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
   state.icount += BigInt(1);
+  if (state.tracing) {
+    state.instrs.push(instr);
+  }
 
   // Check that we have the right number of arguments.
   if (instr.op !== "const") {
@@ -853,6 +856,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   throw error(`unhandled opcode ${(instr as any).op}`);
 }
 
+
 function evalFunc(func: bril.Function, state: State): Value | null {
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
@@ -921,6 +925,10 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       // Update CFG tracking for SSA phi nodes.
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
+      // Push the block name for tracing
+      if (state.tracing) {
+        state.blocks.push(blockName(state));
+      }
     }
   }
 
