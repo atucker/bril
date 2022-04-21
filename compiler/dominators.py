@@ -115,7 +115,7 @@ def route_commands():
         mode = sys.argv[1]
 
     def output(json_data):
-        print(json.dumps(sort_json(json_data), indent=2))
+        print(json.dumps(sort_json(json_data), indent=2), flush=True)
 
     successors = cfg.make_cfg(prog)[1]
     dom = make_dominators(successors)

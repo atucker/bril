@@ -30,11 +30,16 @@ export async function callPython(prog: string, inpt: string, args?: Array<string
   if (args) {
     spawn_args = spawn_args.concat(args);
   }
-  console.log(`Running ${prog}, sending ${inpt} with args ${spawn_args}`);
+  //console.error(`Running ${prog}, sending ${inpt} with args ${spawn_args}`);
   let python = spawn('python', spawn_args);
 
-  python.stdin.write(inpt);
-  python.stdin.end();
+  // Let's see those error messages...
+  python.stderr.on('data', (data) => {
+    console.error(`Python: ${data}`);
+  });
+
+  console.error(`Writing: ${python.stdin.write(inpt)}`);
+  console.error(`Ending: ${python.stdin.end()}`);
 
   return JSON.parse(await readStream(python.stdout));
 }

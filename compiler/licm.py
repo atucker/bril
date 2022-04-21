@@ -1,7 +1,5 @@
 import sys
 import json
-import cfg
-import dominators
 import data_flow
 import cache
 from collections import defaultdict
