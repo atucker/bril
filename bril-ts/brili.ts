@@ -377,14 +377,34 @@ function blockName(state: State): string {
  */
 function domToSet(dom: Map<string, string[]>) {
   let ans = new Map<string, Set<string>>();
-  dom.forEach((setlist: string[], key: string) => {
+  console.error(dom);
+  for (const [key, setlist] of Object.entries(dom)) {
     let set = new Set<string>();
-    setlist.forEach((value) => {
+    setlist.forEach((value: string) => {
       set.add(value);
     })
     ans.set(key, set);
-  });
+  }
   return ans;
+}
+
+/**
+ * Reset the trace
+ */
+function resetTrace(state: State): void {
+  // reset the tracing state
+  state.tracing = false;
+  state.trace_start = null;
+  state.blocks = [];
+  state.instrs = [];
+}
+
+/**
+ * Finalize the trace
+ */
+function finalizeTrace(state: State): void {
+  //console.error(state.instrs);
+  resetTrace(state);
 }
 
 /**
@@ -420,8 +440,10 @@ type State = {
   specparent: State | null,
 
   // For tracing:
-  readonly dom: Map<string, Set<string>>,
   tracing: boolean,
+  readonly dom: Map<string, Set<string>>,
+  backedge_dests: Set<string>,
+  trace_start: string | null,
   curfunc: bril.Function, // current function
   blocks: string[], // blocks traversed
   instrs: bril.Instruction[],
@@ -474,8 +496,10 @@ function evalCall(instr: bril.Operation, state: State): Action {
     curlabel: null,
     specparent: null,  // Speculation not allowed.
 
-    dom: state.dom,
     tracing: false,
+    dom: state.dom,
+    backedge_dests: state.backedge_dests,
+    trace_start: null,
     curfunc: func,
     blocks: [],
     instrs: [],
@@ -921,9 +945,39 @@ function evalFunc(func: bril.Function, state: State): Value | null {
         }
       }
     } else if ('label' in line) {
+      let fromblock = blockName(state);
       // Update CFG tracking for SSA phi nodes.
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
+      let toblock = blockName(state);
+      console.error(`Entered ${toblock}`);
+
+      // Bail out if we're hitting a destination to a backedge
+      // Either we started here (and should stop), or we didn't and should stop
+      if (state.tracing && state.backedge_dests.has(toblock)) {
+        console.error(`${toblock} is a backedge destination, so finalizing.`);
+        finalizeTrace(state);
+      }
+
+      // Check for backedges
+      let dominators = state.dom.get(fromblock);
+      if (dominators && dominators.has(toblock)) {
+        console.error(`${toblock} is a backedge!`);
+        if (state.tracing) {
+          if (toblock == state.trace_start) {
+            console.error(`...We started here, so finalizing`);
+            finalizeTrace(state);
+          } else {
+            console.error(`...We didn't start here, so abandoning`);
+            state.backedge_dests.add(toblock);
+            resetTrace(state);
+          }
+        } else if (!state.specparent) { // don't trace if we're speculating
+          state.tracing = true;
+          state.trace_start = toblock;
+        }
+      }
+
       // Push the block name for tracing
       if (state.tracing) {
         state.blocks.push(blockName(state));
@@ -1005,8 +1059,10 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
     curlabel: null,
     specparent: null,
 
-    dom: set_dom,
     tracing: false,
+    dom: set_dom,
+    backedge_dests: new Set<string>(),
+    trace_start: null,
     curfunc: main,
     blocks: [],
     instrs: []
@@ -1027,7 +1083,8 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
 async function main() {
   try {
     let prog = JSON.parse(await readStdin()) as bril.Program;
-    let dom  = await callPython('compiler/dom.py', JSON.stringify(prog), ['dom']);
+    let dom  = await callPython('/Users/aaron/projects/grad_school/cs6120/bril/compiler/dominators.py', JSON.stringify(prog));
+    //console.error(`dominators: ${dom}`);
     evalProg(prog, dom);
   }
   catch(e) {
