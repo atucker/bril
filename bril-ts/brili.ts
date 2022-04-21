@@ -22,6 +22,10 @@ function error(message: string): BriliError {
   return new BriliError(message);
 }
 
+function debugMessage(message: string): void {
+  console.error(message);
+}
+
 /**
  * An abstract key class used to access the heap.
  * This allows for "pointer arithmetic" on keys,
@@ -103,9 +107,9 @@ export class Heap<X> {
     }
 
     log_heap() {
-        console.error("Heap");
+        debugMessage("Heap");
         this.storage.forEach( (value: X[], key: number) => {
-            console.error(`${key}: ${value}`);
+            debugMessage(`${key}: ${value}`);
         });
     }
 }
@@ -130,7 +134,7 @@ export class RefCounter {
 
   increment(key: Key) {
     this.refcounts.set(key.base, this.count(key) + 1);
-    //console.error(`Incrementing ${key.base} to ${this.count(key)}`);
+    //debugMessage(`Incrementing ${key.base} to ${this.count(key)}`);
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
@@ -143,7 +147,7 @@ export class RefCounter {
       this.deadrefs.add(key.base);
     }
 
-    //console.error(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+    //debugMessage(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
 
     if (!deletion_handled){ this.free_if_norefs(key); }
   }
@@ -378,7 +382,7 @@ function blockName(state: State): string {
  */
 function domToSet(dom: Map<string, string[]>) {
   let ans = new Map<string, Set<string>>();
-  console.error(dom);
+  debugMessage(dom);
   for (const [key, setlist] of Object.entries(dom)) {
     let set = new Set<string>();
     setlist.forEach((value: string) => {
@@ -449,7 +453,7 @@ function transcribeTrace(
  * Finalize the trace
  */
 function finalizeTrace(state: State): void {
-  console.error(state.instrs);
+  debugMessage(state.instrs);
   if (!state.curlabel) { error("State had no current label, malformed"); return;}
   if (!state.trace_start) { error("State had no trace start, malformed");}
   if (!state.curfunc) { error("State had no current function, malformed");}
@@ -472,8 +476,8 @@ function finalizeTrace(state: State): void {
     }
   });
 
-  console.error(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
-  console.error(`with ${JSON.stringify(newinstrs)}`);
+  debugMessage(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
+  debugMessage(`with ${JSON.stringify(newinstrs)}`);
   state.curfunc.instrs = newinstrs;
   resetTrace(state);
 }
@@ -1025,25 +1029,25 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
       let toblock = blockName(state);
-      console.error(`Entered ${toblock}`);
+      debugMessage(`Entered ${toblock}`);
 
       // Bail out if we're hitting a destination to a backedge
       // Either we started here (and should stop), or we didn't and should stop
       if (state.tracing && state.backedge_dests.has(toblock)) {
-        console.error(`${toblock} is a backedge destination, so finalizing.`);
+        debugMessage(`${toblock} is a backedge destination, so finalizing.`);
         finalizeTrace(state);
       }
 
       // Check for backedges
       let dominators = state.dom.get(fromblock);
       if (dominators && dominators.has(toblock)) {
-        console.error(`${toblock} is a backedge!`);
+        debugMessage(`${toblock} is a backedge!`);
         if (state.tracing) {
           if (toblock == state.trace_start) {
-            console.error(`...We started here, so finalizing`);
+            debugMessage(`...We started here, so finalizing`);
             finalizeTrace(state);
           } else {
-            console.error(`...We didn't start here, so abandoning`);
+            debugMessage(`...We didn't start here, so abandoning`);
             state.backedge_dests.add(toblock);
             resetTrace(state);
           }
@@ -1159,7 +1163,7 @@ async function main() {
   try {
     let prog = JSON.parse(await readStdin()) as bril.Program;
     let dom  = await callPython('/Users/aaron/projects/grad_school/cs6120/bril/compiler/dominators.py', JSON.stringify(prog));
-    //console.error(`dominators: ${dom}`);
+    //debugMessage(`dominators: ${dom}`);
     evalProg(prog, dom);
   }
   catch(e) {
