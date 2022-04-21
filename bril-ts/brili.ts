@@ -420,6 +420,7 @@ type State = {
   specparent: State | null,
 
   // For tracing:
+  readonly dom: Map<string, Set<string>>,
   tracing: boolean,
   curfunc: bril.Function, // current function
   blocks: string[], // blocks traversed
@@ -473,6 +474,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     curlabel: null,
     specparent: null,  // Speculation not allowed.
 
+    dom: state.dom,
     tracing: state.tracing,
     curfunc: func,
     blocks: state.blocks,
@@ -976,9 +978,10 @@ function parseMainArguments(expected: bril.Argument[], args: string[]) : Env {
   return newEnv;
 }
 
-function evalProg(prog: bril.Program) {
+function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
   let heap = new Heap<Value>();
   let refcounter = new RefCounter(heap);
+  let set_dom = domToSet(dom);
   let main = findFunc("main", prog.functions);
   if (main === null) {
     console.warn(`no main function defined, doing nothing`);
@@ -1008,6 +1011,7 @@ function evalProg(prog: bril.Program) {
     curlabel: null,
     specparent: null,
 
+    dom: set_dom,
     tracing: false,
     curfunc: main,
     blocks: [],
@@ -1029,7 +1033,8 @@ function evalProg(prog: bril.Program) {
 async function main() {
   try {
     let prog = JSON.parse(await readStdin()) as bril.Program;
-    evalProg(prog);
+    let dom  = await callPython('compiler/dom.py', JSON.stringify(prog), ['dom']);
+    evalProg(prog, dom);
   }
   catch(e) {
     if (e instanceof BriliError) {
