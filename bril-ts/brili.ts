@@ -414,9 +414,7 @@ function transcribeTrace(
   newinstrs.push({'op': 'speculate'});
   for (let i = 0; i < trace.length; ++i) {
     let instr = trace[i];
-    if ('dest' in instr && instr.type == 'bool') {
-      newinstrs.push(instr);
-    } else if ('op' in instr && instr.op == 'jmp' || 'label' in instr) {
+    if ('op' in instr && instr.op == 'jmp' || 'label' in instr) {
       // skip it
     } else if ('op' in instr && instr.op == 'br' && instr.args) {
       // replace breaks with guards
@@ -440,6 +438,8 @@ function transcribeTrace(
           throw error(`Next instruction in trace dafter br ${instr} was not instr`);
         }
       }
+    } else {
+      newinstrs.push(instr);
     }
   }
   newinstrs.push({'op': 'commit'});
@@ -462,11 +462,12 @@ function finalizeTrace(state: State): void {
   if (!start) { throw error("State had no trace start, malformed");}
   if (!state.curfunc) { throw error("State had no current function, malformed");}
   if (start != end) { throw error("Traced a non-loop, malformed");}
-  if (!state.instrs) {
+  if (state.instrs.length <= 1) {
     debugMessage(`Trace had no instructions, so just resetting`);
     resetTrace(state);
     return;
   }
+  console.error(state.instrs);
 
   start = start.split(".").slice(1).join(".");
   end   = end.split(".").slice(1).join(".");
@@ -479,13 +480,13 @@ function finalizeTrace(state: State): void {
   debugMessage(`Made ${straightlineinstrs.length} new instrs ${JSON.stringify(straightlineinstrs)}`);
   let spliced = false;
   state.curfunc.instrs.forEach((instr) => {
-    debugMessage(`adding old instr ${JSON.stringify(instr)}`);
+    //debugMessage(`adding old instr ${JSON.stringify(instr)}`);
     newinstrs.push(instr);
-    if (instr && 'label' in instr && instr.label === start) {
+    if (instr && 'label' in instr && instr.label == start) {
       debugMessage(`Found splice destination ${start}`);
       if (spliced) { throw error("Tried to splice twice");}
       straightlineinstrs.forEach((value) => {
-        debugMessage(`adding new instr ${JSON.stringify(value)}`);
+        //debugMessage(`adding new instr ${JSON.stringify(value)}`);
         newinstrs.push(value);
       });
       spliced = true;
@@ -497,8 +498,8 @@ function finalizeTrace(state: State): void {
     return;
   }
 
-  debugMessage(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
-  debugMessage(`with      ${JSON.stringify(newinstrs)}`);
+  console.error(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
+  console.error(`with      ${JSON.stringify(newinstrs)}`);
   state.curfunc.instrs = newinstrs;
   resetTrace(state);
 }
@@ -950,7 +951,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Begin speculation.
   case "speculate": {
-    if (state.tracing) {finalizeTrace(state);}
+    if (state.tracing) {
+      debugMessage(`Hit speculation, so finalizing`);
+      state.instrs.pop();
+      finalizeTrace(state);
+    }
     return {"action": "speculate"};
   }
 
@@ -1064,7 +1069,10 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       if (dominators && dominators.has(toblock)) {
         debugMessage(`${toblock} is a backedge!`);
         if (state.tracing) {
-          if (toblock == state.trace_start) {
+          if (state.blocks.length <= 1) {
+            debugMessage(`...Never left block, so this was straightlined, and we abandon`);
+            resetTrace(state);
+          } else if (toblock == state.trace_start) {
             debugMessage(`...We started here, so finalizing`);
             finalizeTrace(state);
           } else {
