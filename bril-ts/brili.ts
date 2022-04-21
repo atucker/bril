@@ -22,7 +22,7 @@ function error(message: string): BriliError {
   return new BriliError(message);
 }
 
-function debugMessage(message: string): void {
+function debugMessage(message: any): void {
   console.error(message);
 }
 
@@ -437,7 +437,7 @@ function transcribeTrace(
             )
           }
         } else {
-          error(`Next instruction in trace dafter br ${instr} was not instr`);
+          throw error(`Next instruction in trace dafter br ${instr} was not instr`);
         }
       }
     }
@@ -446,7 +446,7 @@ function transcribeTrace(
   newinstrs.push({'op': 'jmp', 'labels': [trace_end_label]});
   newinstrs.push({'label': skip_label});
 
-  return newinstrs
+  return newinstrs;
 }
 
 /**
@@ -454,30 +454,40 @@ function transcribeTrace(
  */
 function finalizeTrace(state: State): void {
   debugMessage(state.instrs);
-  if (!state.curlabel) { error("State had no current label, malformed"); return;}
-  if (!state.trace_start) { error("State had no trace start, malformed");}
-  if (!state.curfunc) { error("State had no current function, malformed");}
-  if (state.curlabel != state.trace_start) { error("Traced a non-loop, malformed");}
+  if (!state.curlabel) { throw error("State had no current label, malformed"); return;}
+  if (!state.trace_start) { throw error("State had no trace start, malformed"); return;}
+  if (!state.curfunc) { throw error("State had no current function, malformed");}
+  if (state.curlabel != state.trace_start) { throw error("Traced a non-loop, malformed");}
 
+
+  let start = state.trace_start;
+  let end   = state.curlabel;
   let skip_postfix = `${state.curfunc.instrs.length}`;
   let newinstrs = new Array<(Instruction | Label)>();
-  let straightlineinstrs = transcribeTrace(
-      state.curlabel, state.curlabel, skip_postfix, state.instrs
-  );
+  let straightlineinstrs = transcribeTrace(start, end, skip_postfix, state.instrs);
+  debugMessage(`Made ${straightlineinstrs.length} new instrs ${JSON.stringify(straightlineinstrs)}`);
   let spliced = false;
   state.curfunc.instrs.forEach((instr) => {
-    if (instr) {newinstrs.push(instr);}
-    if (instr && 'label' in instr && instr.label == state.trace_start) {
-      if (spliced) { error("Tried to splice twice");}
+    debugMessage(`adding old instr ${JSON.stringify(instr)}`);
+    newinstrs.push(instr);
+    if (instr && 'label' in instr && instr.label === start) {
+      debugMessage(`Found splice destination ${start}`);
+      if (spliced) { throw error("Tried to splice twice");}
       straightlineinstrs.forEach((value) => {
-        if (value) {newinstrs.push(value);}
+        debugMessage(`adding new instr ${JSON.stringify(value)}`);
+        newinstrs.push(value);
       });
       spliced = true;
     }
   });
+  if (!spliced) {
+    debugMessage(`Didn't find splicing destination ${start}`);
+    throw error(`Didn't find splicing destination ${start}`);
+    return;
+  }
 
   debugMessage(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
-  debugMessage(`with ${JSON.stringify(newinstrs)}`);
+  debugMessage(`with      ${JSON.stringify(newinstrs)}`);
   state.curfunc.instrs = newinstrs;
   resetTrace(state);
 }
@@ -935,7 +945,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Abort speculation if the condition is false.
   case "guard": {
-    if (state.tracing) {error(`tracing during guard for state ${state}`)}
+    if (state.tracing) {throw error(`tracing during guard for state ${state}`)}
     if (getBool(instr, state.env, 0)) {
       return NEXT;
     } else {
@@ -945,7 +955,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Resolve speculation, making speculative state real.
   case "commit": {
-    if (state.tracing) {error(`tracing during commit for state ${state}`)}
+    if (state.tracing) {throw error(`tracing during commit for state ${state}`)}
     return {"action": "commit"};
   }
 
