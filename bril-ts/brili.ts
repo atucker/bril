@@ -2,6 +2,7 @@
 import * as bril from './bril';
 import {readStdin, callPython, unreachable} from './util';
 import {ChildProcess, ExecException} from "child_process";
+import {Instruction, Label} from "./bril";
 
 /**
  * An interpreter error to print to the console.
@@ -399,11 +400,81 @@ function resetTrace(state: State): void {
   state.instrs = [];
 }
 
+function transcribeTrace(
+    trace_start_label: string, trace_end_label: string, skip_postfix: string,
+    trace: (Instruction | Label)[]
+): (Instruction | Label)[] {
+  let newinstrs = new Array<(Instruction | Label)>();
+  let skip_label = `${trace_start_label}${skip_postfix}`;
+
+  newinstrs.push({'op': 'speculate'});
+  for (let i = 0; i < trace.length; ++i) {
+    let instr = trace[i];
+    if ('dest' in instr && instr.type == 'bool') {
+      newinstrs.push(instr);
+    } else if ('op' in instr && instr.op == 'jmp' || 'label' in instr) {
+      // skip it
+    } else if ('op' in instr && instr.op == 'br' && instr.args) {
+      // replace breaks with guards
+      if (i + 1 < trace.length) {
+        let nextinstr = trace[i + 1];
+        let cond = instr.args[0]
+        // figure out where we went
+        if ('label' in nextinstr) {
+          if (nextinstr.label == getLabel(instr, 0)) {
+            newinstrs.push({'op': 'guard', 'args': [cond], 'labels': [skip_label]})
+          } else {
+            let not_cond = `not_${cond}`;
+            newinstrs.push(
+                {'op': 'not', 'args': [cond], 'type': 'bool', 'dest': not_cond}
+            )
+            newinstrs.push(
+                {'op': 'guard', 'args': [not_cond], 'labels': [skip_label]}
+            )
+          }
+        } else {
+          error(`Next instruction in trace dafter br ${instr} was not instr`);
+        }
+      }
+    }
+  }
+  newinstrs.push({'op': 'commit'});
+  newinstrs.push({'op': 'jmp', 'labels': [trace_end_label]});
+  newinstrs.push({'label': skip_label});
+
+  return newinstrs
+}
+
 /**
  * Finalize the trace
  */
 function finalizeTrace(state: State): void {
-  //console.error(state.instrs);
+  console.error(state.instrs);
+  if (!state.curlabel) { error("State had no current label, malformed"); return;}
+  if (!state.trace_start) { error("State had no trace start, malformed");}
+  if (!state.curfunc) { error("State had no current function, malformed");}
+  if (state.curlabel != state.trace_start) { error("Traced a non-loop, malformed");}
+
+  let skip_postfix = `${state.curfunc.instrs.length}`;
+  let newinstrs = new Array<(Instruction | Label)>();
+  let straightlineinstrs = transcribeTrace(
+      state.curlabel, state.curlabel, skip_postfix, state.instrs
+  );
+  let spliced = false;
+  state.curfunc.instrs.forEach((instr) => {
+    if (instr) {newinstrs.push(instr);}
+    if (instr && 'label' in instr && instr.label == state.trace_start) {
+      if (spliced) { error("Tried to splice twice");}
+      straightlineinstrs.forEach((value) => {
+        if (value) {newinstrs.push(value);}
+      });
+      spliced = true;
+    }
+  });
+
+  console.error(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
+  console.error(`with ${JSON.stringify(newinstrs)}`);
+  state.curfunc.instrs = newinstrs;
   resetTrace(state);
 }
 
@@ -446,7 +517,7 @@ type State = {
   trace_start: string | null,
   curfunc: bril.Function, // current function
   blocks: string[], // blocks traversed
-  instrs: bril.Instruction[],
+  instrs: (Instruction | Label)[],
 }
 
 /**
