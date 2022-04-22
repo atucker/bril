@@ -464,7 +464,7 @@ function finalizeTrace(state: State): void {
   if (!end) { throw error("State had no current label, malformed");}
   if (!start) { throw error("State had no trace start, malformed");}
   if (!state.curfunc) { throw error("State had no current function, malformed");}
-  if (start != end) { throw error("Traced a non-loop, malformed");}
+  //if (start != end) { throw error("Traced a non-loop, malformed");}
   if (state.instrs.length <= 1) {
     debugMessage(`Trace had no instructions, so just resetting`);
     resetTrace(state);
