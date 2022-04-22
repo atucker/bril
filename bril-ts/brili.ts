@@ -2,7 +2,7 @@
 import * as bril from './bril';
 import {readStdin, callPython, unreachable} from './util';
 import {ChildProcess, ExecException} from "child_process";
-import {Instruction, Label} from "./bril";
+import {EffectOperation, Instruction, Label} from "./bril";
 
 /**
  * An interpreter error to print to the console.
@@ -22,8 +22,8 @@ function error(message: string): BriliError {
   return new BriliError(message);
 }
 
-function debugMessage(message: any): void {
-  console.error(message);
+function debugMessage(message: any, priority: number): void {
+  if (priority > 3) {console.error(message);}
 }
 
 /**
@@ -107,9 +107,9 @@ export class Heap<X> {
     }
 
     log_heap() {
-        debugMessage("Heap");
+        debugMessage("Heap", 1);
         this.storage.forEach( (value: X[], key: number) => {
-            debugMessage(`${key}: ${value}`);
+            debugMessage(`${key}: ${value}`, 1);
         });
     }
 }
@@ -136,7 +136,7 @@ export class RefCounter {
 
   increment(key: Key) {
     this.refcounts.set(key.base, this.count(key) + 1);
-    //debugMessage(`Incrementing ${key.base} to ${this.count(key)}`);
+    //debugMessage(`Incrementing ${key.base} to ${this.count(key)}`, 1);
   }
 
   decrement(key: Key, deletion_handled: boolean=false, reason: string="") {
@@ -149,7 +149,7 @@ export class RefCounter {
       this.deadrefs.add(key.base);
     }
 
-    //debugMessage(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`);
+    //debugMessage(`Decrementing ${key.base} to ${this.count(key)} for ${reason}`, 1);
 
     if (!deletion_handled){ this.free_if_norefs(key); }
   }
@@ -366,25 +366,13 @@ function getFunc(instr: bril.Operation, index: number): bril.Ident {
   return instr.funcs[index];
 }
 
-/**
- * Name the basic block based on the current state
- * This mirrors compilers/cfg.func_prefix
- */
-function blockName(state: State): string {
-  let prefix = '';
-  if (state.funcs.length > 1 && state.curfunc && state.curfunc.name) {
-    prefix = `${state.curfunc.name}.`;
-  }
-  let label = state.curlabel || 'entry';
-  return `${prefix}${label}`;
-}
 
 /**
  * Fix the dom to be Map<string, Set<string>>, not Map<string, string[]>
  */
 function domToSet(dom: Map<string, string[]>) {
   let ans = new Map<string, Set<string>>();
-  debugMessage(dom);
+  debugMessage(dom, 2);
   for (const [key, setlist] of Object.entries(dom)) {
     let set = new Set<string>();
     setlist.forEach((value: string) => {
@@ -395,22 +383,141 @@ function domToSet(dom: Map<string, string[]>) {
   return ans;
 }
 
-/**
- * Reset the trace
- */
-function resetTrace(state: State): void {
-  if (!state.trace) {throw error("Tried to reset trace w/ trace off");}
-  // reset the tracing state
-  state.tracing = false;
-  state.trace_start = null;
-  state.blocks = [];
-  state.instrs = [];
+type Instrs = (Instruction | Label)[];
+
+class JITTracer {
+  tracing: boolean = false;
+  readonly dom: Map<string, Set<string>>;
+  backedge_dests: Set<string>;
+  trace_start: string | null = null;
+  curfunc: bril.Function | null = null;
+  blocks: string[];
+  instrs: Instrs;
+  state: State;
+
+  constructor(state: State, dom:  Map<string, Set<string>>) {
+    this.state = state;
+    this.dom = dom;
+    this.backedge_dests = new Set<string>()
+    this.blocks = [];
+    this.instrs = [];
+    this.reset("Initializing");
+  }
+
+  reset(message: string): void {
+    debugMessage(`Reset: ${message}`, 2);
+    this.tracing = false;
+    this.trace_start = null;
+    this.blocks = [];
+    this.instrs = [];
+  }
+
+  /**
+   * Name the basic block based on the current state
+   * This mirrors compilers/cfg.func_prefix
+   */
+  curBlockName(): string {
+    if (!this.state) {throw error("Asked for block name without state")}
+    if (!this.curfunc) {throw error("Asked for block name without function")}
+    let prefix = '';
+    if (this.state.funcs.length > 1 && this.curfunc.name) {
+      prefix = `${this.curfunc.name}.`;
+    }
+    let label = this.state.curlabel || 'entry';
+    return `${prefix}${label}`;
+  }
+
+  validatePath(): string[] {
+    let start = this.trace_start;
+    let end   = this.curBlockName();
+    debugMessage(`Traced ${start} -> ${end}, along ${this.blocks}`, 1);
+    debugMessage(this.instrs, 2);
+    if (!end) { throw error("State had no current label, malformed");}
+    if (!start) { throw error("State had no trace start, malformed");}
+    //if (start != end) { throw error("Traced a non-loop, malformed");}
+    debugMessage(this.instrs, 5);
+    start = start.split(".").slice(1).join(".");
+    end   = end.split(".").slice(1).join(".");
+    return [start, end];
+  }
+
+  finalize(message: string): void {
+    debugMessage(`Finalized: ${message}`, 2);
+    if (this.instrs.length <= 1) {
+      this.reset(`Trace had no instructions`);
+      return;
+    }
+    if (!this.curfunc) {throw error('Finalized without curfunc');}
+    let [start, end] = this.validatePath();
+    let skip_postfix = `/${this.curfunc.instrs.length}`;
+    let spliceinstrs = transcribe(start, end, skip_postfix, this.instrs);
+    let newinstrs = new Array<(Instruction | Label)>();
+
+    debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
+    debugMessage(newinstrs, 3);
+    debugMessage(`replacing ${JSON.stringify(this.curfunc.instrs)}`, 3);
+    debugMessage(`with      ${JSON.stringify(newinstrs)}`, 3);
+    this.curfunc.instrs = newinstrs;
+    this.reset("done finalizing")
+  }
+
+  transitionBlock(from: string | undefined, to: string | undefined): void {
+    if (!from || !to) {throw error(`Malformed transition ${from} -> ${to}`);}
+
+    debugMessage(`Entered ${to}`, 1);
+    // Bail out if we're hitting a destination to a backedge
+    // Either we started here (and should stop), or we didn't and should stop
+    if (this.tracing && this.backedge_dests.has(to)) {
+      this.finalize(`${to} is a backedge destination`)
+    }
+
+    // Check for backedges
+    let dominators = this.dom.get(from);
+    if (dominators && dominators.has(to)) {
+      debugMessage(`${to} is a backedge!`, 2);
+      if (this.tracing) {
+        if (this.blocks.length <= 1) {
+          this.reset(`...Never left block, so this was straightlined, and we abandon`);
+        } else if (to == this.trace_start) {
+          this.finalize(`...We started here`);
+        } else {
+          this.backedge_dests.add(to);
+          this.reset(`...We didn't start here`);
+        }
+      } else if (!this.state.specparent) { // don't trace if we're speculating
+        this.tracing = true;
+        this.trace_start = to;
+      }
+    }
+    // Push the block name for tracing
+    if (this.tracing) {this.blocks.push(to)}
+  }
 }
 
-function transcribeTrace(
+function replaceBranch(
+    newinstrs: Instrs, instr: EffectOperation, nextinstr: Label, skip_label: string
+): void {
+  if (!instr.args) {throw error(`Branch ${instr} has no args`)}
+
+  let cond = instr.args[0]
+  // figure out where we went
+  if (nextinstr.label == getLabel(instr, 0)) {
+    newinstrs.push({'op': 'guard', 'args': [cond], 'labels': [skip_label]})
+  } else {
+    let not_cond = `not_${cond}`;
+    newinstrs.push(
+        {'op': 'not', 'args': [cond], 'type': 'bool', 'dest': not_cond}
+    )
+    newinstrs.push(
+        {'op': 'guard', 'args': [not_cond], 'labels': [skip_label]}
+    )
+  }
+}
+
+function transcribe(
     trace_start_label: string, trace_end_label: string, skip_postfix: string,
-    trace: (Instruction | Label)[]
-): (Instruction | Label)[] {
+    trace: Instrs
+): Instrs {
   let newinstrs = new Array<(Instruction | Label)>();
   let skip_label = `${trace_start_label}${skip_postfix}`;
 
@@ -425,24 +532,11 @@ function transcribeTrace(
       // replace breaks with guards
       if (i + 1 < trace.length) {
         let nextinstr = trace[i + 1];
-        let cond = instr.args[0]
-        // figure out where we went
-        if ('label' in nextinstr) {
-          if (nextinstr.label == getLabel(instr, 0)) {
-            newinstrs.push({'op': 'guard', 'args': [cond], 'labels': [skip_label]})
-          } else {
-            found_branch = true;
-            let not_cond = `not_${cond}`;
-            newinstrs.push(
-                {'op': 'not', 'args': [cond], 'type': 'bool', 'dest': not_cond}
-            )
-            newinstrs.push(
-                {'op': 'guard', 'args': [not_cond], 'labels': [skip_label]}
-            )
-          }
-        } else {
-          throw error(`Next instruction in trace dafter br ${instr} was not instr`);
+        if (!('label' in nextinstr)) {
+          throw error(`Instruction ${nextinstr} after br ${instr} was not label`);
         }
+        found_branch = true;
+        replaceBranch(newinstrs, instr, nextinstr, skip_label);
       }
     } else {
       newinstrs.push(instr);
@@ -452,65 +546,29 @@ function transcribeTrace(
   newinstrs.push({'op': 'jmp', 'labels': [trace_end_label]});
   newinstrs.push({'label': skip_label});
 
-  if (!found_branch) {return []};
+  if (!found_branch) {return []}
   return newinstrs;
 }
 
-/**
- * Finalize the trace
- */
-function finalizeTrace(state: State): void {
-  if (!state.trace) {throw error("Tried to finalize trace w/ trace off");}
-
-  let start = state.trace_start;
-  let end   = blockName(state);
-  debugMessage(`Traced ${start} -> ${end}, along ${state.blocks}`);
-  debugMessage(state.instrs);
-
-  if (!end) { throw error("State had no current label, malformed");}
-  if (!start) { throw error("State had no trace start, malformed");}
-  if (!state.curfunc) { throw error("State had no current function, malformed");}
-  //if (start != end) { throw error("Traced a non-loop, malformed");}
-  if (state.instrs.length <= 1) {
-    debugMessage(`Trace had no instructions, so just resetting`);
-    resetTrace(state);
-    return;
-  }
-  console.error(state.instrs);
-
-  start = start.split(".").slice(1).join(".");
-  end   = end.split(".").slice(1).join(".");
-
-  let skip_postfix = `/${state.curfunc.instrs.length}`;
-  let newinstrs = new Array<(Instruction | Label)>();
-  let straightlineinstrs = transcribeTrace(
-      start, end, skip_postfix, state.instrs
-  );
-  debugMessage(`Made ${straightlineinstrs.length} new instrs ${JSON.stringify(straightlineinstrs)}`);
+function splice(newinstrs: Instrs, instrs: Instrs, start: string, spliceinstrs: Instrs): void {
   let spliced = false;
-  state.curfunc.instrs.forEach((instr) => {
-    //debugMessage(`adding old instr ${JSON.stringify(instr)}`);
+  instrs.forEach((instr) => {
+    debugMessage(`adding old instr ${JSON.stringify(instr)}`, 0);
     newinstrs.push(instr);
     if (instr && 'label' in instr && instr.label == start) {
-      debugMessage(`Found splice destination ${start}`);
+      debugMessage(`Found splice destination ${start}`, 1);
       if (spliced) { throw error("Tried to splice twice");}
-      straightlineinstrs.forEach((value) => {
-        //debugMessage(`adding new instr ${JSON.stringify(value)}`);
+      spliceinstrs.forEach((value) => {
+        debugMessage(`adding new instr ${JSON.stringify(value)}`, 0);
         newinstrs.push(value);
       });
       spliced = true;
     }
   });
   if (!spliced) {
-    debugMessage(`Didn't find splicing destination ${start}`);
+    debugMessage(`Didn't find splicing destination ${start}`, 1);
     throw error(`Didn't find splicing destination ${start}`);
-    return;
   }
-
-  console.error(`replacing ${JSON.stringify(state.curfunc.instrs)}`);
-  console.error(`with      ${JSON.stringify(newinstrs)}`);
-  state.curfunc.instrs = newinstrs;
-  resetTrace(state);
 }
 
 /**
@@ -545,15 +603,8 @@ type State = {
   // For speculation: the state at the point where speculation began.
   specparent: State | null,
 
-  // For tracing:
-  trace: boolean,
-  tracing: boolean,
-  readonly dom: Map<string, Set<string>>,
-  backedge_dests: Set<string>,
-  trace_start: string | null,
-  curfunc: bril.Function, // current function
-  blocks: string[], // blocks traversed
-  instrs: (Instruction | Label)[],
+  // For tracing
+  tracer: JITTracer | null,
 }
 
 /**
@@ -602,19 +653,14 @@ function evalCall(instr: bril.Operation, state: State): Action {
     lastlabel: null,
     curlabel: null,
     specparent: null,  // Speculation not allowed.
-
-    trace: state.trace,
-    tracing: false,
-    dom: state.dom,
-    backedge_dests: state.backedge_dests,
-    trace_start: null,
-    curfunc: func,
-    blocks: [],
-    instrs: [],
+    tracer: state.tracer,
   }
 
   // Don't need to update func since we send over a new state
+  let oldfunc = null;
+  if (state.tracer) {oldfunc = state.tracer.curfunc}
   let retVal = evalFunc(func, newState);
+  if (state.tracer) {state.tracer.curfunc = oldfunc}
   state.icount = newState.icount;
 
   // Dynamically check the function's return value and type.
@@ -872,10 +918,9 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   }
 
   case "call": {
-    if (state.tracing) {
-      debugMessage(`Hit call, so finalizing`);
-      state.instrs.pop();
-      finalizeTrace(state);
+    if (state.tracer) {
+      state.tracer.instrs.pop();
+      state.tracer.finalize(`Hit call, so finalizing`);
     }
     return evalCall(instr, state);
   }
@@ -967,17 +1012,18 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Begin speculation.
   case "speculate": {
-    if (state.tracing) {
-      debugMessage(`Hit speculation, so finalizing`);
-      state.instrs.pop();
-      finalizeTrace(state);
+    if (state.tracer) {
+      state.tracer.instrs.pop();
+      state.tracer.finalize(`Hit speculation`);
     }
     return {"action": "speculate"};
   }
 
   // Abort speculation if the condition is false.
   case "guard": {
-    if (state.tracing) {throw error(`tracing during guard for state ${state}`)}
+    if (state.tracer && state.tracer.tracing) {
+      throw error(`tracing during guard for state ${state}`);
+    }
     if (getBool(instr, state.env, 0)) {
       return NEXT;
     } else {
@@ -987,7 +1033,9 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
   // Resolve speculation, making speculative state real.
   case "commit": {
-    if (state.tracing) {throw error(`tracing during commit for state ${state}`)}
+    if (state.tracer && state.tracer.tracing) {
+      throw error(`tracing during commit for state ${state}`);
+    }
     return {"action": "commit"};
   }
 
@@ -999,10 +1047,11 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
 function evalFunc(func: bril.Function, state: State): Value | null {
   state.curlabel = 'entry';
+  if (state.tracer) {state.tracer.curfunc = func;}
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
-    if (state.tracing && line) {
-      state.instrs.push(line);
+    if (state.tracer && state.tracer.tracing && line) {
+      state.tracer.instrs.push(line);
     }
     if ('op' in line) {
       // Run an instruction.
@@ -1066,46 +1115,15 @@ function evalFunc(func: bril.Function, state: State): Value | null {
         }
       }
     } else if ('label' in line) {
-      let fromblock = blockName(state);
+      let fromblock = state.tracer?.curBlockName();
       // Update CFG tracking for SSA phi nodes.
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
-      let toblock = blockName(state);
-      debugMessage(`Entered ${toblock}`);
+      let toblock = state.tracer?.curBlockName();
 
-      // Bail out if we're hitting a destination to a backedge
-      // Either we started here (and should stop), or we didn't and should stop
-      if (state.tracing && state.backedge_dests.has(toblock)) {
-        debugMessage(`${toblock} is a backedge destination, so finalizing.`);
-        finalizeTrace(state);
-      }
+      if(state.tracer) {state.tracer.transitionBlock(fromblock, toblock);}
 
-      // Check for backedges
-      let dominators = state.dom.get(fromblock);
-      if (dominators && dominators.has(toblock)) {
-        debugMessage(`${toblock} is a backedge!`);
-        if (state.tracing) {
-          if (state.blocks.length <= 1) {
-            debugMessage(`...Never left block, so this was straightlined, and we abandon`);
-            resetTrace(state);
-          } else if (toblock == state.trace_start) {
-            debugMessage(`...We started here, so finalizing`);
-            finalizeTrace(state);
-          } else {
-            debugMessage(`...We didn't start here, so abandoning`);
-            state.backedge_dests.add(toblock);
-            resetTrace(state);
-          }
-        } else if (!state.specparent && state.trace) { // don't trace if we're speculating
-          state.tracing = true;
-          state.trace_start = toblock;
-        }
-      }
 
-      // Push the block name for tracing
-      if (state.tracing) {
-        state.blocks.push(blockName(state));
-      }
     }
   }
 
@@ -1197,16 +1215,9 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
     lastlabel: null,
     curlabel: null,
     specparent: null,
-
-    trace: jit,
-    tracing: false,
-    dom: set_dom,
-    backedge_dests: new Set<string>(),
-    trace_start: null,
-    curfunc: main,
-    blocks: [],
-    instrs: []
+    tracer: null,
   }
+  if (jit) {state.tracer = new JITTracer(state, set_dom);}
   evalFunc(main, state);
   
   if (!heap.isEmpty()) {
