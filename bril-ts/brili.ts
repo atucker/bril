@@ -385,18 +385,24 @@ function domToSet(dom: Map<string, string[]>) {
 
 type Instrs = (Instruction | Label)[];
 
+type FunctionState = {
+  curfunc: bril.Function,
+  idx: number,
+  newidx: number | null,
+}
+
 class JITTracer {
   tracing: boolean = false;
   readonly dom: Map<string, Set<string>>;
   backedge_dests: Set<string>;
   trace_start: string | null = null;
   trace_start_label: string | null = null;
-  curfunc: bril.Function | null = null;
+
   blocks: string[];
   instrs: Instrs;
   state: State;
-  funcidx: number | null = null;
-  newidx: number | null = null
+
+  func_state: FunctionState | null = null;
 
   constructor(state: State, dom:  Map<string, Set<string>>) {
     this.state = state;
@@ -422,11 +428,11 @@ class JITTracer {
    */
   curBlockName(): string {
     if (!this.state) {throw error("Asked for block name without state")}
-    if (!this.curfunc) {throw error("Asked for block name without function")}
+    if (!this.func_state) {throw error("Asked for block name without function state")}
     if (!this.state.curlabel) {throw error("Asked for block name with unlabeled state")}
     let prefix = '';
-    if (this.state.funcs.length > 1 && this.curfunc.name) {
-      prefix = `${this.curfunc.name}.`;
+    if (this.state.funcs.length > 1 && this.func_state.curfunc.name) {
+      prefix = `${this.func_state.curfunc.name}.`;
     }
     let label = this.state.curlabel;
     return `${prefix}${label}`;
@@ -452,20 +458,20 @@ class JITTracer {
       this.reset(`Trace had no instructions`);
       return;
     }
-    if (!this.curfunc) {throw error('Finalized without curfunc');}
-    if (!this.funcidx) {throw error('Finalized with function instr idx');}
+    if (!this.func_state) {throw error('Finalized without func state');}
     let [start, end] = this.validatePath();
-    let skip_postfix = `/${this.curfunc.instrs.length}`;
+    let skip_postfix = `/${this.func_state.curfunc.instrs.length}`;
     let spliceinstrs = transcribe(start, end, skip_postfix, this.instrs);
     let newinstrs = new Array<(Instruction | Label)>();
 
     debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);
-    let [spliceidx, newidx] = splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
-    if (spliceidx > this.funcidx) {this.newidx = newidx}
+    let [spliceidx, newidx] = splice(newinstrs, this.func_state.curfunc.instrs, start, spliceinstrs);
+    debugMessage(`function at ${this.func_state.idx}, added code at ${spliceidx}`, 3);
+    if (spliceidx < this.func_state.idx) {this.func_state.newidx = newidx}
     debugMessage(newinstrs, 3);
-    debugMessage(`replacing ${JSON.stringify(this.curfunc.instrs)}`, 3);
+    debugMessage(`replacing ${JSON.stringify(this.func_state.curfunc.instrs)}`, 3);
     debugMessage(`with      ${JSON.stringify(newinstrs)}`, 3);
-    this.curfunc.instrs = newinstrs;
+    this.func_state.curfunc.instrs = newinstrs;
     this.reset("done finalizing")
   }
 
@@ -673,10 +679,14 @@ function evalCall(instr: bril.Operation, state: State): Action {
   }
 
   // Don't need to update func since we send over a new state
-  let oldfunc = null;
-  if (state.tracer) {oldfunc = state.tracer.curfunc}
-  let retVal = evalFunc(func, newState);
-  if (state.tracer) {state.tracer.curfunc = oldfunc}
+  let retVal = null;
+  if (state.tracer) {
+    let old_func_state = state.tracer.func_state;
+    retVal = evalFunc(func, newState);
+    state.tracer.func_state = old_func_state;
+  } else {
+    retVal = evalFunc(func, newState);
+  }
   state.icount = newState.icount;
 
   // Dynamically check the function's return value and type.
@@ -720,7 +730,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * instruction or "end" to terminate the function.
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
-  debugMessage(`Evaluating ${JSON.stringify(instr)}`, 5);
+  debugMessage(`Evaluating ${JSON.stringify(instr)}`, 4);
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -1064,20 +1074,29 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 
 function evalFunc(func: bril.Function, state: State): Value | null {
   state.curlabel = 'entry';
-  if (state.tracer) {state.tracer.curfunc = func;}
+  if (state.tracer) {
+    state.tracer.func_state = {curfunc: func, idx: 0, newidx: null}
+  }
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
-    if (state.tracer) {state.tracer.funcidx = i;}
+    if (state.tracer && state.tracer.func_state) {
+      state.tracer.func_state.idx = i;
+      if (state.tracer.tracing) {state.tracer.instrs.push(line)}
+    }
+
     if ('op' in line) {
       // Run an instruction.
-
+      let next_instr = func.instrs[i+1];
       let action = evalInstr(line, state);
-      if (state.tracer && 'op' in line && line.op == 'call' && i + 1 < func.instrs.length) {
-        debugMessage(`Next instr is ${JSON.stringify(func.instrs[i+1])}`, 3);
+
+      if (state.tracer && 'op' in line && line.op == 'call') {
+        debugMessage(`Next instr is ${JSON.stringify(next_instr)}`, 3);
       }
-      if (state.tracer && state.tracer.newidx) {
-        i = state.tracer.newidx;
-        state.tracer.newidx = null;
+      if (state.tracer && state.tracer.func_state && state.tracer.func_state.newidx) {
+        let diff = state.tracer.func_state.newidx - state.tracer.func_state.idx;
+        debugMessage(`Jumping from ${i} to ${i + diff}`, 3)
+        i += diff;
+        state.tracer.func_state.newidx = null;
       }
 
       // Take the prescribed action.
