@@ -599,7 +599,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     curlabel: null,
     specparent: null,  // Speculation not allowed.
 
-    trace: true,
+    trace: state.trace,
     tracing: false,
     dom: state.dom,
     backedge_dests: state.backedge_dests,
