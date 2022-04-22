@@ -397,6 +397,7 @@ function domToSet(dom: Map<string, string[]>) {
  * Reset the trace
  */
 function resetTrace(state: State): void {
+  if (!state.trace) {throw error("Tried to reset trace w/ trace off");}
   // reset the tracing state
   state.tracing = false;
   state.trace_start = null;
@@ -453,6 +454,8 @@ function transcribeTrace(
  * Finalize the trace
  */
 function finalizeTrace(state: State): void {
+  if (!state.trace) {throw error("Tried to finalize trace w/ trace off");}
+
   let start = state.trace_start;
   let end   = blockName(state);
   debugMessage(`Traced ${start} -> ${end}, along ${state.blocks}`);
@@ -537,6 +540,7 @@ type State = {
   specparent: State | null,
 
   // For tracing:
+  trace: boolean,
   tracing: boolean,
   readonly dom: Map<string, Set<string>>,
   backedge_dests: Set<string>,
@@ -593,6 +597,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     curlabel: null,
     specparent: null,  // Speculation not allowed.
 
+    trace: true,
     tracing: false,
     dom: state.dom,
     backedge_dests: state.backedge_dests,
@@ -1085,7 +1090,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
             state.backedge_dests.add(toblock);
             resetTrace(state);
           }
-        } else if (!state.specparent) { // don't trace if we're speculating
+        } else if (!state.specparent && state.trace) { // don't trace if we're speculating
           state.tracing = true;
           state.trace_start = toblock;
         }
@@ -1158,6 +1163,14 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
     args.splice(pidx, 1);
   }
 
+  let jit = false;
+  pidx = args.indexOf('-jit');
+  if (pidx > -1) {
+    jit = true;
+    args.splice(pidx, 1);
+  }
+
+
   // Remaining arguments are for the main function.k
   let expected = main.args || [];
   let newEnv = parseMainArguments(expected, args);
@@ -1172,6 +1185,7 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
     curlabel: null,
     specparent: null,
 
+    trace: jit,
     tracing: false,
     dom: set_dom,
     backedge_dests: new Set<string>(),
