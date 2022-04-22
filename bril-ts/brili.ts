@@ -555,7 +555,10 @@ function splice(newinstrs: Instrs, instrs: Instrs, start: string, spliceinstrs: 
   instrs.forEach((instr) => {
     debugMessage(`adding old instr ${JSON.stringify(instr)}`, 0);
     newinstrs.push(instr);
-    if (instr && 'label' in instr && instr.label == start) {
+    if (instr &&  (
+        'label' in instr && instr.label == start ||
+        start == 'entry' && !spliced
+    )) {
       debugMessage(`Found splice destination ${start}`, 1);
       if (spliced) { throw error("Tried to splice twice");}
       spliceinstrs.forEach((value) => {
