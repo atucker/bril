@@ -86,6 +86,7 @@ def add_cfg_prints(named_blocks):
 
 
 def func_prefix(func, prog):
+    # mirrored in brili.ts func_prefix
     return f"{func['name']}." if len(prog['functions']) > 1 else ''
 
 
