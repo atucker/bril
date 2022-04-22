@@ -395,6 +395,8 @@ class JITTracer {
   blocks: string[];
   instrs: Instrs;
   state: State;
+  funcidx: number | null = null;
+  newidx: number | null = null
 
   constructor(state: State, dom:  Map<string, Set<string>>) {
     this.state = state;
@@ -451,13 +453,15 @@ class JITTracer {
       return;
     }
     if (!this.curfunc) {throw error('Finalized without curfunc');}
+    if (!this.funcidx) {throw error('Finalized with function instr idx');}
     let [start, end] = this.validatePath();
     let skip_postfix = `/${this.curfunc.instrs.length}`;
     let spliceinstrs = transcribe(start, end, skip_postfix, this.instrs);
     let newinstrs = new Array<(Instruction | Label)>();
 
     debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);
-    splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
+    let [spliceidx, newidx] = splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
+    if (spliceidx > this.funcidx) {this.newidx = newidx}
     debugMessage(newinstrs, 3);
     debugMessage(`replacing ${JSON.stringify(this.curfunc.instrs)}`, 3);
     debugMessage(`with      ${JSON.stringify(newinstrs)}`, 3);
@@ -555,25 +559,32 @@ function transcribe(
   return newinstrs;
 }
 
-function splice(newinstrs: Instrs, instrs: Instrs, start: string | null, spliceinstrs: Instrs): void {
-  let spliced = false;
-  instrs.forEach((instr) => {
+function splice(newinstrs: Instrs, instrs: Instrs, start: string | null, spliceinstrs: Instrs): number[] {
+  let splicedidx = -1;
+  let newidx = -1;
+  instrs.forEach((instr, index) => {
     debugMessage(`adding old instr ${JSON.stringify(instr)}`, 0);
     newinstrs.push(instr);
-    if (instr &&  ('label' in instr && instr.label == start || !start && !spliced)) {
+    if (instr &&  (
+        'label' in instr && instr.label == start ||
+        start == 'entry' && splicedidx < 0
+    )) {
       debugMessage(`Found splice destination ${start}`, 1);
-      if (spliced) { throw error("Tried to splice twice");}
+      if (splicedidx > -1) { throw error("Tried to splice twice");}
+      splicedidx = index;
+      newidx = splicedidx;
       spliceinstrs.forEach((value) => {
         debugMessage(`adding new instr ${JSON.stringify(value)}`, 0);
         newinstrs.push(value);
+        newidx++;
       });
-      spliced = true;
     }
   });
-  if (!spliced) {
+  if (splicedidx < 0) {
     debugMessage(`Didn't find splicing destination ${start}`, 1);
     throw error(`Didn't find splicing destination ${start}`);
   }
+  return [splicedidx, newidx]
 }
 
 /**
@@ -709,6 +720,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * instruction or "end" to terminate the function.
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
+  debugMessage(`Evaluating ${JSON.stringify(instr)}`, 5);
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -923,7 +935,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   }
 
   case "call": {
-    if (state.tracer) {
+    if (state.tracer && state.tracer.tracing) {
       state.tracer.instrs.pop();
       state.tracer.finalize(`Hit call, so finalizing`);
     }
@@ -1055,12 +1067,18 @@ function evalFunc(func: bril.Function, state: State): Value | null {
   if (state.tracer) {state.tracer.curfunc = func;}
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
-    if (state.tracer && state.tracer.tracing && line) {
-      state.tracer.instrs.push(line);
-    }
+    if (state.tracer) {state.tracer.funcidx = i;}
     if ('op' in line) {
       // Run an instruction.
+
       let action = evalInstr(line, state);
+      if (state.tracer && 'op' in line && line.op == 'call' && i + 1 < func.instrs.length) {
+        debugMessage(`Next instr is ${JSON.stringify(func.instrs[i+1])}`, 3);
+      }
+      if (state.tracer && state.tracer.newidx) {
+        i = state.tracer.newidx;
+        state.tracer.newidx = null;
+      }
 
       // Take the prescribed action.
       switch (action.action) {
@@ -1125,10 +1143,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
       let toblock = state.tracer?.curBlockName();
-
       if(state.tracer) {state.tracer.transitionBlock(fromblock, toblock);}
-
-
     }
   }
 
