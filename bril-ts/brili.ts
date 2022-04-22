@@ -372,7 +372,7 @@ function getFunc(instr: bril.Operation, index: number): bril.Ident {
  */
 function domToSet(dom: Map<string, string[]>) {
   let ans = new Map<string, Set<string>>();
-  debugMessage(dom, 2);
+  debugMessage(dom, 3);
   for (const [key, setlist] of Object.entries(dom)) {
     let set = new Set<string>();
     setlist.forEach((value: string) => {
@@ -441,7 +441,7 @@ class JITTracer {
   validatePath(): string[] {
     debugMessage(
         `Traced ${this.trace_start} -> ${this.curBlockName()}, along ${this.blocks}`,
-        1
+        3
     );
     debugMessage(this.instrs, 2);
     if (!this.state.curlabel) { throw error("State had no current label, malformed");}
@@ -478,7 +478,7 @@ class JITTracer {
   transitionBlock(from: string | undefined, to: string | undefined): void {
     if (!from || !to) {throw error(`Malformed transition ${from} -> ${to}`);}
 
-    debugMessage(`Entered ${to}`, 1);
+    debugMessage(`Went from ${from} -> ${to}`, 1);
     // Bail out if we're hitting a destination to a backedge
     // Either we started here (and should stop), or we didn't and should stop
     if (this.tracing && this.backedge_dests.has(to)) {
