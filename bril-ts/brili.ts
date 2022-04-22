@@ -388,7 +388,7 @@ type Instrs = (Instruction | Label)[];
 type FunctionState = {
   curfunc: bril.Function,
   idx: number,
-  newidx: number | null,
+  diff: number | null,
 }
 
 class JITTracer {
@@ -465,9 +465,9 @@ class JITTracer {
     let newinstrs = new Array<(Instruction | Label)>();
 
     debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);
-    let [spliceidx, newidx] = splice(newinstrs, this.func_state.curfunc.instrs, start, spliceinstrs);
+    let [spliceidx, diff] = splice(newinstrs, this.func_state.curfunc.instrs, start, spliceinstrs);
     debugMessage(`function at ${this.func_state.idx}, added code at ${spliceidx}`, 3);
-    if (spliceidx < this.func_state.idx) {this.func_state.newidx = newidx}
+    if (spliceidx < this.func_state.idx) {this.func_state.diff = diff}
     debugMessage(newinstrs, 3);
     debugMessage(`replacing ${JSON.stringify(this.func_state.curfunc.instrs)}`, 3);
     debugMessage(`with      ${JSON.stringify(newinstrs)}`, 3);
@@ -590,7 +590,7 @@ function splice(newinstrs: Instrs, instrs: Instrs, start: string | null, splicei
     debugMessage(`Didn't find splicing destination ${start}`, 1);
     throw error(`Didn't find splicing destination ${start}`);
   }
-  return [splicedidx, newidx]
+  return [splicedidx, newidx-splicedidx]
 }
 
 /**
@@ -730,7 +730,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * instruction or "end" to terminate the function.
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
-  debugMessage(`Evaluating ${JSON.stringify(instr)}`, 4);
+  debugMessage(`Evaluating ${JSON.stringify(instr)}`, 0);
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -1075,7 +1075,7 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
 function evalFunc(func: bril.Function, state: State): Value | null {
   state.curlabel = 'entry';
   if (state.tracer) {
-    state.tracer.func_state = {curfunc: func, idx: 0, newidx: null}
+    state.tracer.func_state = {curfunc: func, idx: 0, diff: null}
   }
   for (let i = 0; i < func.instrs.length; ++i) {
     let line = func.instrs[i];
@@ -1092,11 +1092,10 @@ function evalFunc(func: bril.Function, state: State): Value | null {
       if (state.tracer && 'op' in line && line.op == 'call') {
         debugMessage(`Next instr is ${JSON.stringify(next_instr)}`, 3);
       }
-      if (state.tracer && state.tracer.func_state && state.tracer.func_state.newidx) {
-        let diff = state.tracer.func_state.newidx - state.tracer.func_state.idx;
-        debugMessage(`Jumping from ${i} to ${i + diff}`, 3)
-        i += diff;
-        state.tracer.func_state.newidx = null;
+      if (state.tracer && state.tracer.func_state && state.tracer.func_state.diff) {
+        debugMessage(`Jumping from ${i} to ${i + state.tracer.func_state.diff}`, 3)
+        i += state.tracer.func_state.diff;
+        state.tracer.func_state.diff = null;
       }
 
       // Take the prescribed action.
