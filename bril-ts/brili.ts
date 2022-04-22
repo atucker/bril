@@ -414,6 +414,8 @@ function transcribeTrace(
   let newinstrs = new Array<(Instruction | Label)>();
   let skip_label = `${trace_start_label}${skip_postfix}`;
 
+  let found_branch = false;
+
   newinstrs.push({'op': 'speculate'});
   for (let i = 0; i < trace.length; ++i) {
     let instr = trace[i];
@@ -429,6 +431,7 @@ function transcribeTrace(
           if (nextinstr.label == getLabel(instr, 0)) {
             newinstrs.push({'op': 'guard', 'args': [cond], 'labels': [skip_label]})
           } else {
+            found_branch = true;
             let not_cond = `not_${cond}`;
             newinstrs.push(
                 {'op': 'not', 'args': [cond], 'type': 'bool', 'dest': not_cond}
@@ -449,6 +452,7 @@ function transcribeTrace(
   newinstrs.push({'op': 'jmp', 'labels': [trace_end_label]});
   newinstrs.push({'label': skip_label});
 
+  if (!found_branch) {return []};
   return newinstrs;
 }
 
@@ -477,7 +481,7 @@ function finalizeTrace(state: State): void {
   start = start.split(".").slice(1).join(".");
   end   = end.split(".").slice(1).join(".");
 
-  let skip_postfix = `${state.curfunc.instrs.length}`;
+  let skip_postfix = `/${state.curfunc.instrs.length}`;
   let newinstrs = new Array<(Instruction | Label)>();
   let straightlineinstrs = transcribeTrace(
       start, end, skip_postfix, state.instrs
