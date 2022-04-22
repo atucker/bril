@@ -118,11 +118,13 @@ export class RefCounter {
   private readonly refcounts: Map<number, number>;
   private readonly deadrefs: Set<number>;
   private readonly heap: Heap<Value>;
+  active: boolean;
 
   constructor(heap: Heap<Value>) {
     this.refcounts = new Map();
     this.deadrefs = new Set();
     this.heap = heap;
+    this.active = true;
   }
 
   count(key: Key): number {
@@ -153,7 +155,7 @@ export class RefCounter {
   }
 
   free_if_norefs(key: Key) {
-    if (this.count(key) == 0) {
+    if (this.count(key) == 0 && this.active) {
       // need to free w/ offset 0
       let key_base = new Key(key.base, 0);
       this.heap.free(key_base);
@@ -1170,6 +1172,13 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
     args.splice(pidx, 1);
   }
 
+  let gc = false;
+  pidx = args.indexOf('-gc');
+  if (pidx > -1) {
+    gc = true;
+    args.splice(pidx, 1);
+  }
+  refcounter.active = gc;
 
   // Remaining arguments are for the main function.k
   let expected = main.args || [];
