@@ -390,6 +390,7 @@ class JITTracer {
   readonly dom: Map<string, Set<string>>;
   backedge_dests: Set<string>;
   trace_start: string | null = null;
+  trace_start_label: string | null = null;
   curfunc: bril.Function | null = null;
   blocks: string[];
   instrs: Instrs;
@@ -408,6 +409,7 @@ class JITTracer {
     debugMessage(`Reset: ${message}`, 2);
     this.tracing = false;
     this.trace_start = null;
+    this.trace_start_label = null;
     this.blocks = [];
     this.instrs = [];
   }
@@ -419,26 +421,27 @@ class JITTracer {
   curBlockName(): string {
     if (!this.state) {throw error("Asked for block name without state")}
     if (!this.curfunc) {throw error("Asked for block name without function")}
+    if (!this.state.curlabel) {throw error("Asked for block name with unlabeled state")}
     let prefix = '';
     if (this.state.funcs.length > 1 && this.curfunc.name) {
       prefix = `${this.curfunc.name}.`;
     }
-    let label = this.state.curlabel || 'entry';
+    let label = this.state.curlabel;
     return `${prefix}${label}`;
   }
 
   validatePath(): string[] {
-    let start = this.trace_start;
-    let end   = this.curBlockName();
-    debugMessage(`Traced ${start} -> ${end}, along ${this.blocks}`, 1);
+    debugMessage(
+        `Traced ${this.trace_start} -> ${this.curBlockName()}, along ${this.blocks}`,
+        1
+    );
     debugMessage(this.instrs, 2);
-    if (!end) { throw error("State had no current label, malformed");}
-    if (!start) { throw error("State had no trace start, malformed");}
+    if (!this.state.curlabel) { throw error("State had no current label, malformed");}
+    if (!this.trace_start) { throw error("State had no trace start, malformed");}
+    if (!this.trace_start_label) { throw error("State had no trace start label, malformed"); }
     //if (start != end) { throw error("Traced a non-loop, malformed");}
     debugMessage(this.instrs, 5);
-    start = start.split(".").slice(1).join(".");
-    end   = end.split(".").slice(1).join(".");
-    return [start, end];
+    return [this.trace_start_label, this.state.curlabel];
   }
 
   finalize(message: string): void {
@@ -453,7 +456,8 @@ class JITTracer {
     let spliceinstrs = transcribe(start, end, skip_postfix, this.instrs);
     let newinstrs = new Array<(Instruction | Label)>();
 
-    debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
+    debugMessage(`Made ${spliceinstrs.length} new instrs ${JSON.stringify(spliceinstrs)}`, 1);
+    splice(newinstrs, this.curfunc.instrs, start, spliceinstrs);
     debugMessage(newinstrs, 3);
     debugMessage(`replacing ${JSON.stringify(this.curfunc.instrs)}`, 3);
     debugMessage(`with      ${JSON.stringify(newinstrs)}`, 3);
@@ -487,6 +491,7 @@ class JITTracer {
       } else if (!this.state.specparent) { // don't trace if we're speculating
         this.tracing = true;
         this.trace_start = to;
+        this.trace_start_label = this.state.curlabel;
       }
     }
     // Push the block name for tracing
@@ -550,15 +555,12 @@ function transcribe(
   return newinstrs;
 }
 
-function splice(newinstrs: Instrs, instrs: Instrs, start: string, spliceinstrs: Instrs): void {
+function splice(newinstrs: Instrs, instrs: Instrs, start: string | null, spliceinstrs: Instrs): void {
   let spliced = false;
   instrs.forEach((instr) => {
     debugMessage(`adding old instr ${JSON.stringify(instr)}`, 0);
     newinstrs.push(instr);
-    if (instr &&  (
-        'label' in instr && instr.label == start ||
-        start == 'entry' && !spliced
-    )) {
+    if (instr &&  ('label' in instr && instr.label == start || !start && !spliced)) {
       debugMessage(`Found splice destination ${start}`, 1);
       if (spliced) { throw error("Tried to splice twice");}
       spliceinstrs.forEach((value) => {
