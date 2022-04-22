@@ -10,5 +10,5 @@ pipeline = [
 [runs.licm]
 pipeline = [
     "bril2json",
-    "brili -p -jit {args}",
+    "brili -jit -p {args}",
 ]
