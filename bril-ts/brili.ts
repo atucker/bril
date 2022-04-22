@@ -1155,7 +1155,7 @@ function evalProg(prog: bril.Program, dom: Map<string, string[]>) {
   }
 
   // Silly argument parsing to find the `-p` flag.
-  let args: string[] = process.argv.slice(2, process.argv.length);
+  let args: string[] = process.argv.slice(3, process.argv.length);
   let profiling = false;
   let pidx = args.indexOf('-p');
   if (pidx > -1) {
