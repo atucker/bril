@@ -30,6 +30,13 @@ GRAMMAR = """
 %ignore WS
 """.strip()
 PARSER = lark.Lark(GRAMMAR)
+MAPPING = {}
+for line in GRAMMAR.split('\n'):
+    if '->' in line:
+        if len(line.split(' "')) == 2:
+            symbol, rest = line.split(' "')[1].split('" ')
+            word = rest.split('-> ')[1]
+            MAPPING[word] = symbol
 
 
 def solve(phi):
@@ -92,6 +99,7 @@ def z3_interp(tree, lookup=None, readonly=False):
         expr = (cond != 0) * true + (cond == 0) * false
         return expr, lookup if readonly else merge_dicts(cvars, merge_dicts(tvars, fvars))
     assert False
+
 
 def interp(tree):
     output, vars = z3_interp(tree)
@@ -219,6 +227,18 @@ class Forest:
                 max_depth = node.depth
             if node.depth >= stop_depth:
                 return None
+
+
+def pretty_print(tree, lookup=None):
+    op = tree.data
+    if op == 'var':
+        varname = str(tree.children[0])
+        if lookup and varname in lookup:
+            return lookup[varname]
+        else:
+            return varname
+    else:
+        return f"({pretty_print(tree.children[0])} {MAPPING[op]} {pretty_print(tree.children[1])})"
 
 
 def force_sketches(spec_expr, spec_vars):
