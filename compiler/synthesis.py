@@ -123,13 +123,119 @@ def synthesize(spec, sketch):
     model = solve(goal)
     if model is None:
         return None
-    for key, item in sketch_vars.items():
-        plain_vars[key] = model.eval(item)
-    return z3_interp(sketch_expr, plain_vars)[0]
+
+    return substitute_solution(sketch_expr, sketch_vars, model)
+
+
+class Node:
+    def __init__(self, tree, depth):
+        self.tree = tree
+        self.depth = depth
+
+    @property
+    def identifier(self):
+        return str(self.tree)
+
+    def __str__(self):
+        return self.identifier
+
+
+class Forest:
+    def __init__(self, init_to_depth=5):
+        self.ops = ('shl', 'shr')
+        self.commutative_ops = ('or', 'and', 'sub', 'add')
+
+        self.n_holes = 0
+        self.seen = set()
+        self.nodes = {}
+        self.frontier = []
+
+        self.x_var = Node(lark.Tree('var', [lark.Token('CNAME', 'x')]), 0)
+        self.add(self.x_var)
+
+    def new_hole(self):
+        self.n_holes += 1
+        name = f"h{self.n_holes}"
+        return Node(lark.Tree('var', [lark.Token('CNAME', name)]), 0)
+
+    def add(self, node):
+        if node.depth not in self.nodes:
+            self.nodes[node.depth] = []
+
+        if node.identifier not in self.seen:
+            self.seen.add(node.identifier)
+            self.nodes[node.depth].append(node)
+            self.frontier.append(node)
+
+    def add_ops(self, node1, node2):
+        depth = max(node1.depth, node2.depth) + 1
+        for op in self.ops:
+            self.add(Node(lark.Tree(op, [node1.tree, node2.tree]), depth))
+            self.add(Node(lark.Tree(op, [node1.tree, node2.tree]), depth))
+        for op in self.commutative_ops:
+            # canonicalize representation
+            if node1.identifier < node2.identifier:
+                self.add(Node(lark.Tree(op, [node1.tree, node2.tree]), depth))
+            else:
+                self.add(Node(lark.Tree(op, [node2.tree, node1.tree]), depth))
+
+    def add_leaf(self, node):
+        self.add_ops(node, self.x_var)
+        self.add_ops(node, self.new_hole())
+
+    def expand_top(self, node):
+        for d in [0] + list(range(node.depth)):
+            if d == 0:
+                self.add_ops(node, self.x_var)
+                self.add_ops(node, self.new_hole())
+            else:
+                for node2 in self.nodes[d]:
+                    self.add_ops(node, node2)
+
+    def search(self, expand_fn, spec_expr, spec_vars, stop_depth=None):
+        max_depth = 0
+        i = 0
+        for node in self.frontier:
+            i += 1
+            expand_fn(node)
+
+            sketch_expr, sketch_vars = z3_interp(node.tree, spec_vars)
+
+            plain_vars = dict(
+                (key, value) for key, value in sketch_vars.items()
+                if not key.startswith('h')
+            )
+            goal = z3.ForAll(list(plain_vars.values()), spec_expr == sketch_expr, )
+            model = solve(goal)
+
+            if model is not None:
+                print("Done")
+                return node, sketch_expr, model
+
+            if i % 100 == 0:
+                print(f"Evaluated {i} trees")
+            if node.depth > max_depth:
+                print(f"Entering depth {node.depth}")
+                max_depth = node.depth
+            if node.depth >= stop_depth:
+                return None
+
+
+def force_sketches(spec_expr, spec_vars):
+    forest = Forest()
+    ans = forest.search(forest.add_leaf, spec_expr, spec_vars, stop_depth=4)
+    if ans is not None:
+        return ans
+    else:
+        # Restart the search, and know that we'll skip over everything we already tried since it was seen
+        # Note that everything already used is in the node set used to expand the top, so they'll get spliced in
+        forest.frontier = []
+        forest.add(forest.x_var)
+        forest.add(forest.new_hole())
+        return forest.search(forest.expand_top, spec_expr, spec_vars, stop_depth=5)
 
 
 if __name__ == "__main__":
     spec = sys.stdin.readline()
     sketch = sys.stdin.readline()
     ans = synthesize(spec, sketch)
-
