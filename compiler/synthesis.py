@@ -257,6 +257,24 @@ def force_sketches(spec_expr, spec_vars):
 
 
 if __name__ == "__main__":
-    spec = sys.stdin.readline()
-    sketch = sys.stdin.readline()
-    ans = synthesize(spec, sketch)
+    assert len(sys.argv) in {1, 2}
+    mode = 'synthesize'
+    if len(sys.argv) == 2:
+        mode = sys.argv[1]
+
+    if mode == 'synthesize':
+        spec = sys.stdin.readline()
+        sketch = sys.stdin.readline()
+        print(synthesize(spec, sketch))
+    elif mode == 'force_sketch':
+        spec = sys.stdin.readline()
+        spec_tree = PARSER.parse(spec)
+        spec_expr, spec_vars = z3_interp(spec_tree)
+        ans = force_sketches(spec_expr, spec_vars)
+        if ans is None:
+            print("Failed")
+        else:
+            node, model = ans
+            print(pretty_print(node.tree))
+            print(pretty_print_model(node.tree, model))
+
