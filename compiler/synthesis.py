@@ -54,7 +54,7 @@ def merge_dicts(d1, d2):
 
 def z3_interp(tree, lookup=None, readonly=False):
     op = tree.data
-    if op in ('add', 'sub', 'mul', 'div', 'shl', 'shr'):
+    if op in ('add', 'sub', 'mul', 'div', 'shl', 'shr', 'or', 'and'):
         lhs, lhvars = z3_interp(tree.children[0], lookup)
         rhs, rhvars = z3_interp(tree.children[1], lookup)
         if op == 'add':
@@ -70,9 +70,9 @@ def z3_interp(tree, lookup=None, readonly=False):
         elif op == 'shr':
             return lhs >> rhs, lookup if readonly else merge_dicts(lhvars, rhvars)
         elif op == 'or':
-            return lhs & rhs, lookup if readonly else merge_dicts(lhvars, rhvars)
-        elif op == 'and':
             return lhs | rhs, lookup if readonly else merge_dicts(lhvars, rhvars)
+        elif op == 'and':
+            return lhs & rhs, lookup if readonly else merge_dicts(lhvars, rhvars)
     elif op == 'neg':
         sub, vs = z3_interp(tree.children[0], lookup)
         return -sub, vs
@@ -91,7 +91,7 @@ def z3_interp(tree, lookup=None, readonly=False):
         false, fvars = z3_interp(tree.children[2], lookup)
         expr = (cond != 0) * true + (cond == 0) * false
         return expr, lookup if readonly else merge_dicts(cvars, merge_dicts(tvars, fvars))
-
+    assert False
 
 def interp(tree):
     output, vars = z3_interp(tree)
