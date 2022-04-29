@@ -106,11 +106,24 @@ def interp(tree):
     return output
 
 
-def substitute_solution(sketch_expr, sketch_vars, model):
+def pretty_print(tree, lookup=None):
+    op = tree.data
+    if op == 'var':
+        varname = str(tree.children[0])
+        if lookup and varname in lookup:
+            return lookup[varname]
+        else:
+            return varname
+    else:
+        return f"({pretty_print(tree.children[0], lookup)} {MAPPING[op]} {pretty_print(tree.children[1], lookup)})"
+
+
+def pretty_print_model(tree, model):
+    _, sketch_vars = z3_interp(tree)
     variables = {}
     for key, item in sketch_vars.items():
-        variables[key] = model.eval(item)
-    return z3_interp(sketch_expr, variables)[0]
+        variables[str(key)] = model.eval(item)
+    return pretty_print(tree, variables)
 
 
 def synthesize(spec, sketch):
@@ -130,9 +143,9 @@ def synthesize(spec, sketch):
 
     model = solve(goal)
     if model is None:
-        return None
+        return "Failed"
 
-    return substitute_solution(sketch_expr, sketch_vars, model)
+    return pretty_print_model(sketch_tree, model)
 
 
 class Node:
@@ -227,18 +240,6 @@ class Forest:
                 max_depth = node.depth
             if node.depth >= stop_depth:
                 return None
-
-
-def pretty_print(tree, lookup=None):
-    op = tree.data
-    if op == 'var':
-        varname = str(tree.children[0])
-        if lookup and varname in lookup:
-            return lookup[varname]
-        else:
-            return varname
-    else:
-        return f"({pretty_print(tree.children[0])} {MAPPING[op]} {pretty_print(tree.children[1])})"
 
 
 def force_sketches(spec_expr, spec_vars):
