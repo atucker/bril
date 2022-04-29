@@ -230,13 +230,13 @@ class Forest:
             model = solve(goal)
 
             if model is not None:
-                print("Done")
-                return node, sketch_expr, model
+                print("Done", file=sys.stderr)
+                return node, model
 
             if i % 100 == 0:
-                print(f"Evaluated {i} trees")
+                print(f"Evaluated {i} trees", file=sys.stderr)
             if node.depth > max_depth:
-                print(f"Entering depth {node.depth}")
+                print(f"Entering depth {node.depth}", file=sys.stderr)
                 max_depth = node.depth
             if node.depth >= stop_depth:
                 return None
