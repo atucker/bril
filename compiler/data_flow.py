@@ -3,6 +3,7 @@ import sys
 import cfg
 from collections import defaultdict, OrderedDict
 from functools import reduce
+import cache
 
 FORWARD = "FORWARD"
 BACKWARD = "BACKWARD"
@@ -40,9 +41,12 @@ def get_used(instrs):
     return used
 
 
-def func_run_worklist_algorithm(func, spec, func_name):
-    blocks, successors = cfg.make_func_cfg(func, func_name)
-    predecessors = cfg.get_predecessors(successors)
+def func_run_worklist_algorithm(func, spec, func_name, analysis=None):
+    if analysis is None:
+        analysis = {}
+    blocks, successors, predecessors = cache.func_ensure_analysis(
+        func, analysis, [cache.BLOCKS, cache.SUCCESSORS, cache.PREDECESSORS]
+    )
 
     block_in, block_out = spec.init(func, blocks, func_name)
 
@@ -206,6 +210,12 @@ REACHABILITY = Spec(
     copy=copy_var_version_set,
     stringify=stringify_var_version_set
 )
+
+
+def func_reachability(func, analysis=None):
+    return func_run_worklist_algorithm(
+        func, REACHABILITY, '',  analysis
+    )
 
 
 def route_worklists():
