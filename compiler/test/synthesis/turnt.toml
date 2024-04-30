@@ -1,0 +1,1 @@
+command = "cat {filename} | python ../../synthesis.py {args}"
